@@ -1,0 +1,309 @@
+// LyricsRepository.kt
+package org.audiocular.peq.app.data.lyrics
+
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.get
+import io.ktor.http.encodeURLPathPart
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.audiocular.peq.app.data.SyncedLine
+import kotlin.math.abs
+
+class LyricsRepository {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
+    private val client = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 5000
+            connectTimeoutMillis = 5000
+            socketTimeoutMillis = 5000
+        }
+
+        expectSuccess = false
+    }
+
+    private val cache = mutableMapOf<String, List<SyncedLine>>()
+
+    suspend fun fetchLyrics(
+        artist: String?,
+        title: String,
+        durationMs: Long? = null
+    ): List<SyncedLine>? {
+
+        val normalizedArtist = normalizeArtist(artist ?: "")
+        val normalizedTitle = normalizeTitle(title)
+
+        val cacheKey = "$normalizedArtist-$normalizedTitle"
+
+        cache[cacheKey]?.let {
+            return it
+        }
+
+        val query =
+            "$normalizedArtist $normalizedTitle"
+                .trim()
+
+        val url =
+            "https://lrclib.net/api/search?q=${query.encodeURLPathPart()}"
+
+        return try {
+
+            val response: String =
+                client.get(url).body()
+
+            val results =
+                json.decodeFromString<List<LrclibSearchResult>>(response)
+
+            if (results.isEmpty()) {
+                return null
+            }
+
+            val best =
+                results.minByOrNull {
+                    calculateScore(
+                        localArtist = normalizedArtist,
+                        localTitle = normalizedTitle,
+                        apiArtist = normalizeArtist(it.artistName),
+                        apiTitle = normalizeTitle(it.trackName),
+                        localDuration = durationMs,
+                        apiDuration = it.duration?.toLong()?.times(1000L)
+                    )
+                }
+
+            val lyrics =
+                best?.syncedLyrics
+                    ?: best?.plainLyrics
+
+            if (lyrics.isNullOrBlank()) {
+                return null
+            }
+
+            val parsed =
+                if (best?.syncedLyrics != null) {
+                    parseLrc(lyrics)
+                } else {
+                    lyrics.lines()
+                        .filter { it.isNotBlank() }
+                        .map {
+                            SyncedLine(
+                                timestampMs = 0L,
+                                text = it
+                            )
+                        }
+                }
+
+            cache[cacheKey] = parsed
+
+            parsed
+
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun calculateScore(
+        localArtist: String,
+        localTitle: String,
+        apiArtist: String,
+        apiTitle: String,
+        localDuration: Long?,
+        apiDuration: Long?
+    ): Int {
+
+        val titleScore =
+            levenshtein(localTitle, apiTitle)
+
+        val artistScore =
+            levenshtein(localArtist, apiArtist)
+
+        val durationScore =
+            if (
+                localDuration != null &&
+                apiDuration != null
+            ) {
+                (abs(localDuration - apiDuration) / 1000).toInt()
+            } else {
+                0
+            }
+
+        return (
+            (titleScore * 70) +
+                    (artistScore * 20) +
+                    (durationScore * 10)
+                )
+    }
+
+    private fun normalizeTitle(title: String): String {
+        return title
+            .lowercase()
+            .replace(
+                Regex("\\(.*?\\)|\\[.*?\\]"),
+                ""
+            )
+            .replace(
+                Regex("feat\\..*", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .replace(
+                Regex("ft\\..*", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .replace(
+                Regex("- live.*", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .replace(
+                Regex("- remaster.*", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
+            .trim()
+    }
+
+    private fun normalizeArtist(artist: String): String {
+        return artist
+            .lowercase()
+            .replace(
+                Regex("feat\\..*", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
+            .trim()
+    }
+
+    private fun parseLrc(
+        lrc: String
+    ): List<SyncedLine> {
+
+        val lines =
+            mutableListOf<SyncedLine>()
+
+        val timeRegex =
+            Regex("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
+
+        lrc.lines().forEach { rawLine ->
+
+            val matches =
+                timeRegex.findAll(rawLine).toList()
+
+            if (matches.isEmpty()) {
+                return@forEach
+            }
+
+            val text =
+                rawLine.replace(timeRegex, "")
+                    .trim()
+
+            matches.forEach { match ->
+
+                val min =
+                    match.groupValues[1].toLong()
+
+                val sec =
+                    match.groupValues[2].toLong()
+
+                val ms =
+                    match.groupValues[3]
+                        .padEnd(3, '0')
+                        .toLong()
+
+                val time =
+                    (min * 60_000L) +
+                            (sec * 1000L) +
+                            ms
+
+                lines.add(
+                    SyncedLine(
+                        timestampMs = time,
+                        text = text
+                    )
+                )
+            }
+        }
+
+        return lines.sortedBy {
+            it.timestampMs
+        }
+    }
+
+    /*
+     * Simple Levenshtein Distance
+     * Tiny + good enough
+     */
+
+    private fun levenshtein(
+        lhs: String,
+        rhs: String
+    ): Int {
+
+        val dp =
+            Array(lhs.length + 1) {
+                IntArray(rhs.length + 1)
+            }
+
+        for (i in 0..lhs.length) {
+            dp[i][0] = i
+        }
+
+        for (j in 0..rhs.length) {
+            dp[0][j] = j
+        }
+
+        for (i in 1..lhs.length) {
+
+            for (j in 1..rhs.length) {
+
+                val cost =
+                    if (lhs[i - 1] == rhs[j - 1]) {
+                        0
+                    } else {
+                        1
+                    }
+
+                dp[i][j] =
+                    minOf(
+                        dp[i - 1][j] + 1,
+                        dp[i][j - 1] + 1,
+                        dp[i - 1][j - 1] + cost
+                    )
+            }
+        }
+
+        return dp[lhs.length][rhs.length]
+    }
+}
+
+@Serializable
+data class LrclibSearchResult(
+
+    @SerialName("id")
+    val id: Int? = null,
+
+    @SerialName("trackName")
+    val trackName: String,
+
+    @SerialName("artistName")
+    val artistName: String,
+
+    @SerialName("duration")
+    val duration: Int? = null,
+
+    @SerialName("plainLyrics")
+    val plainLyrics: String? = null,
+
+    @SerialName("syncedLyrics")
+    val syncedLyrics: String? = null
+)
+
