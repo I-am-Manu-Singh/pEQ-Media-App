@@ -1,0 +1,219 @@
+package org.audiocular.peq.app.ui.viewmodel
+
+import androidx.compose.runtime.*
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import org.audiocular.peq.app.data.*
+import org.audiocular.peq.app.ui.viewmodel.observeLibraryState
+import org.audiocular.peq.app.ui.viewmodel.refreshLibrary
+
+/**
+ * SESSION ENGINE EXTENSION: pEQ NEURAL WORKSTATION
+ * Encapsulates session restoration, persistence, and state synchronization.
+ */
+
+fun AppViewModel.restoreSession() {
+    val manager = persistenceManager
+
+    viewModelScope.launch {
+        try {
+            // 1. Restore Scan Folders immediately to allow library refresh
+            val storedFolders = manager.loadScanFolders()
+            scanFolders.clear()
+            scanFolders.addAll(storedFolders)
+            
+            // 🚀 Kick off library scan so items exist when we wait for them
+            refreshLibrary()
+
+            // 🚀 Industrial Library Synchronization
+            viewModelScope.launch {
+                mediaLibrary.collect { library ->
+                    val current = currentMediaItem.value ?: return@collect
+                    if (current.subtitle == "Media Resource" || current.artist == "Unknown Artist" || current.subtitle == "Local archive" || current.subtitle == "Neural Engine") {
+                        library.find { it.path == current.path }?.let { matched ->
+                            currentMediaItem.value = matched
+                            println("Industrial Sync: Resolved fallback metadata for ${matched.title}")
+                        }
+                    }
+                }
+            }
+
+            // 2. Restore Session State
+            val session = manager.loadSession() ?: SessionState()
+            isLandscapeLocked.value = session.isRotationLocked
+
+            // 3. Wait for library to populate
+            val items = withTimeoutOrNull(4000) { 
+                mediaLibrary.first { it.isNotEmpty() }
+            } ?: mediaLibrary.value
+
+            val resolveItem: (String) -> org.audiocular.peq.app.data.pEQMediaItem? = { path ->
+                _mediaLibrary.value.find { it.path == path } ?: run {
+                    val engineUri = audioEngine.getCurrentTrackUri()
+                    val isCurrentActive = engineUri == path
+                    
+                    if (isCurrentActive) {
+                        org.audiocular.peq.app.data.pEQMediaItem(
+                            id = "engine_${path.hashCode()}",
+                            title = session.lastTrackTitle ?: "Active Stream",
+                            subtitle = session.lastTrackArtist ?: "Neural Engine",
+                            path = path,
+                            thumbnail = session.lastTrackThumbnail,
+                            type = if (path.lowercase().contains("video") || path.lowercase().contains(".mp4")) 
+                                org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
+                            format = "PROBED",
+                            sizeBytes = 0L,
+                            durationMs = 0L
+                        )
+                    } else if (path.startsWith("http")) {
+                        org.audiocular.peq.app.data.pEQMediaItem(
+                            id = "stream_${path.hashCode()}",
+                            title = "Web Stream",
+                            subtitle = path,
+                            path = path,
+                            type = if (path.lowercase().let { it.contains(".mp4") || it.contains(".m3u8") || it.contains(".mov") || it.contains("video") || it.contains(".mkv") }) 
+                                org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
+                            format = "STREAM",
+                            sizeBytes = 0L,
+                            durationMs = 0L,
+                            isStream = true
+                        )
+                    } else {
+                        val fileName = path.substringAfterLast("/").substringBeforeLast(".")
+                        val extension = path.substringAfterLast(".").lowercase()
+                        val isVideoExt = listOf("mp4", "mkv", "webm", "mov", "3gp").contains(extension)
+                        
+                        org.audiocular.peq.app.data.pEQMediaItem(
+                            id = "resolved_${path.hashCode()}",
+                            title = fileName,
+                            subtitle = "Local archive",
+                            path = path,
+                            type = if (isVideoExt) org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
+                            format = extension.uppercase(),
+                            sizeBytes = 0L,
+                            durationMs = 0L
+                        )
+                    }
+                }
+            }
+
+            // 4. Restore Queue
+            if (session.queue.isNotEmpty()) {
+                playbackQueue.clear()
+                playbackQueue.addAll(session.queue)
+            }
+
+            // 5. Restore Current Item
+            val activeUri = audioEngine.getCurrentTrackUri()
+            val targetPath = activeUri ?: session.lastTrackPath
+
+            if (targetPath != null) resolveItem(targetPath)?.let { restoredItem ->
+                currentMediaItem.value = restoredItem
+                currentPosition.value = session.lastPosition
+                
+                currentSampleRate.value = restoredItem.sampleRate ?: 44100
+                currentBitDepth.value = restoredItem.bitDepth ?: 16
+                
+                if (activeUri == null && !audioEngine.isPlaying() && audioEngine.getDuration() <= 0L) {
+                    audioEngine.loadTrack(restoredItem.path, restoredItem.title, restoredItem.subtitle, restoredItem.thumbnail)
+                    audioEngine.seekTo(session.lastPosition)
+                } else if (audioEngine.getDuration() > 0L) {
+                    currentPosition.value = audioEngine.getCurrentPosition()
+                }
+            }
+
+            // 6. Restore Playlists & Favorites
+            val storedPlaylists = manager.loadPlaylists()
+            customPlaylists.clear()
+            storedPlaylists.forEach { (name, paths) ->
+                customPlaylists[name] = paths.mapNotNull { p -> resolveItem(p) }.toMutableStateList()
+            }
+            
+            val storedFavorites = session.favorites.ifEmpty { manager.loadFavorites() }
+            favoriteItems.clear()
+            favoriteItems.addAll(storedFavorites.mapNotNull { p -> resolveItem(p) })
+
+            val storedRecent = manager.loadRecentSessions()
+            recentlyPlayedItems.clear()
+            recentlyPlayedItems.addAll(storedRecent.mapNotNull { path -> resolveItem(path) })
+            
+            // 7. Restore Playback Flags
+            isShuffleEnabled = session.isShuffle
+            repeatMode.value = session.repeatMode
+            favorites.addAll(session.favorites)
+            
+            // Restore DSP State
+            if (session.eqGains.isNotEmpty()) {
+                session.eqGains.forEachIndexed { index, gain -> 
+                    if (index < eqGains.size) {
+                        eqGains[index] = gain
+                        audioEngine.updateEqBand(index, gain)
+                    }
+                }
+            }
+            if (session.eqQs.isNotEmpty()) {
+                session.eqQs.forEachIndexed { index, q -> 
+                    if (index < eqQs.size) {
+                        eqQs[index] = q
+                        audioEngine.updateEqQ(index, q)
+                    }
+                }
+            }
+            session.lastIrPath?.let { path ->
+                convolverIrPath.value = path
+                convolverIrName.value = path.substringAfterLast("/")
+            }
+
+            // 8. Load Play Counts
+            val storedCounts = manager.loadMostPlayed()
+            playCounts.putAll(storedCounts)
+            
+            // Note: Since we don't have a separate lastPlayed persistence yet, 
+            // we'll assume current session for now or implement it in PersistenceManager later.
+            // For now, let's at least populate the library items with what we have.
+            _mediaLibrary.value = _mediaLibrary.value.map { item ->
+                item.copy(playCount = playCounts[item.path] ?: 0)
+            }
+            
+            val (path, show) = manager.loadLibraryState()
+            currentFolderPath.value = path
+            showFolders.value = show
+            
+        } catch (e: Exception) {
+            println("pEQControl: [SYSTEM] Session restore failed: ${e.message}")
+        }
+    }
+    
+    observeLibraryState()
+}
+
+fun AppViewModel.persistSession() {
+    // 📸 Capture snapshots on the Main thread to avoid ConcurrentModificationException on IO thread
+    val sessionToSave = SessionState(
+        lastTrackPath = currentMediaItem.value?.path,
+        lastTrackTitle = currentMediaItem.value?.title,
+        lastTrackArtist = currentMediaItem.value?.artist,
+        lastTrackThumbnail = currentMediaItem.value?.thumbnail,
+        lastPosition = currentPosition.value,
+        isPlaying = isPlaying.value,
+        queue = playbackQueue.toList(),
+        isShuffle = isShuffleEnabled,
+        repeatMode = repeatMode.value,
+        favorites = favorites.toList(),
+        eqGains = eqGains.toList(),
+        eqQs = eqQs.toList(),
+        lastIrPath = convolverIrPath.value
+    )
+    
+    val playlistsToSave = customPlaylists.mapValues { entry -> entry.value.map { item -> item.path } }
+    val favoritesToSave = favoriteItems.map { it.path }
+    val recentToSave = recentlyPlayedItems.map { it.path }
+
+    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        persistenceManager.saveSession(sessionToSave)
+        persistenceManager.savePlaylists(playlistsToSave)
+        persistenceManager.saveFavorites(favoritesToSave)
+        persistenceManager.saveRecentSessions(recentToSave)
+    }
+}

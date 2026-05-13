@@ -130,8 +130,21 @@ data class AutoEqProfile(
     val parametricValues: Map<String, Float> = emptyMap()
 )
 
+
 @Serializable
 data class BeatEvent(
     val soundId: String,
     val timestamp: Long
+)
+
+@Serializable
+data class DrumKit(
+    val name: String, 
+    val labels: List<String>
+)
+
+@Serializable
+data class DrumTutorial(
+    val name: String, 
+    val steps: List<List<String>> = emptyList()
 )

@@ -21,9 +21,9 @@ class LyricsRepository {
 
     private val client = createHttpClient().config {
         install(HttpTimeout) {
-            requestTimeoutMillis = 5000
-            connectTimeoutMillis = 5000
-            socketTimeoutMillis = 5000
+            requestTimeoutMillis = 15000
+            connectTimeoutMillis = 10000
+            socketTimeoutMillis = 15000
         }
     }
 

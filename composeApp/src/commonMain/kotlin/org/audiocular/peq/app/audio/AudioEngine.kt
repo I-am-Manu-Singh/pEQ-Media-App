@@ -90,6 +90,13 @@ interface AudioEngine {
     fun addExternalSubtitle(path: String)
     fun getConnectedDevices(): List<org.audiocular.peq.app.data.Device> = emptyList()
     fun setSubtitlesEnabled(enabled: Boolean)
+
+    // 🎓 Learning & Calibration Engine
+    fun startTuner() {}
+    fun stopTuner() {}
+    fun setMetronomeEnabled(enabled: Boolean) {}
+    fun setBpm(bpm: Float) {}
+
     fun release()
 }
 

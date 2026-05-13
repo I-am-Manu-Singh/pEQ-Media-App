@@ -27,7 +27,8 @@ import org.audiocular.peq.app.ui.components.pEQOrientation
 import org.audiocular.peq.app.pEQBackHandler
 import org.audiocular.peq.app.ui.components.*
 import org.audiocular.peq.app.ui.screens.player.*
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
+import org.audiocular.peq.app.ui.viewmodel.clearPlaybackHistory
 import org.audiocular.peq.app.ui.components.LyricsWebView
 import org.audiocular.peq.app.ui.components.UnifiedMetadataEditor
 import org.audiocular.peq.app.ui.components.MetadataEditorType
@@ -195,7 +196,7 @@ fun PlayerScreen(
                 emptyMessage = "Embedded subtitle tracks will appear here.",
                 onClose = { viewModel.showSubtitleConsole.value = false },
                 onItemClick = { viewModel.switchSubtitle(it) },
-                onOnlineSearch = { viewModel.fetchSubtitlesOnline(autoOpenSheet = true) },
+                onOnlineSearch = { viewModel.fetchSubtitles(autoOpenEditor = true) },
                 onPickFile = { viewModel.requestSubtitlePicker() },
                 itemKey = { it.id },
                 itemTitle = { it.language.uppercase() },

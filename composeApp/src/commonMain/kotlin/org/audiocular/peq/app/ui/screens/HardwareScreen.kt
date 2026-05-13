@@ -17,8 +17,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
+import org.audiocular.peq.app.ui.viewmodel.toggleNeuralSaturation
+import org.audiocular.peq.app.ui.components.pEQGlassCard
 import kotlinx.datetime.Clock
+import org.audiocular.peq.app.ui.components.*
 
 @Composable
 fun HardwareScreen(viewModel: AppViewModel) {
@@ -33,11 +36,8 @@ fun HardwareScreen(viewModel: AppViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // --- HEADER ---
-        Column {
-            Text("pEQ HARDWARE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = primaryColor)
-            Text("COMMAND CENTER", fontSize = 32.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-        }
+        // --- NOW PLAYING TELEMETRY ---
+        NowPlayingTelemetryCard(viewModel, primaryColor)
 
         // --- HARDWARE CORE & STATUS ---
         HardwareCoreSection(viewModel, primaryColor)
@@ -48,12 +48,7 @@ fun HardwareScreen(viewModel: AppViewModel) {
         // --- PROTOCOLS & CALIBRATION ---
         CalibrationMasterSection(viewModel, primaryColor)
         AdvancedProtocolsSection(viewModel, primaryColor)
-
-        // --- INGESTION ---
-        StreamingIntakeSection(viewModel, primaryColor)
-
-        // --- FOOTER ---
-        HardwareFooter()
+    
 
         Spacer(Modifier.height(80.dp))
     }
@@ -63,7 +58,6 @@ fun HardwareScreen(viewModel: AppViewModel) {
 private fun HardwareCoreSection(viewModel: AppViewModel, primaryColor: Color) {
     HardwareSectionCard("HARDWARE CORE & STATUS", icon = Icons.Default.Dns, info = "JNI signal tracing and hardware output registry.") {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            JniTelemetryTerminal(viewModel, primaryColor)
             HardwareRegistrySection(viewModel, primaryColor)
         }
     }
@@ -185,17 +179,12 @@ private fun HardwareSectionCard(
 ) {
     var showInfo by remember { mutableStateOf(false) }
     
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.1f))
-    ) {
+    pEQGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text(title, fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 11.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f), letterSpacing = 1.2.sp)
                 
                 if (info != null) {
                     IconButton(onClick = { showInfo = !showInfo }, modifier = Modifier.size(24.dp)) {
@@ -210,7 +199,7 @@ private fun HardwareSectionCard(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    Text(info, fontSize = 9.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp), fontWeight = FontWeight.Bold)
+                    Text(info, fontSize = 9.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold, lineHeight = 14.sp)
                 }
             }
             
@@ -224,13 +213,24 @@ private fun HardwareSectionCard(
 private fun HardwareControlItem(label: String, value: String, desc: String, enabled: Boolean, onToggle: ((Boolean) -> Unit)? = null) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(desc, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(desc, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 14.sp)
         }
         if (onToggle != null) {
-            Switch(checked = enabled, onCheckedChange = onToggle)
+            Switch(
+                checked = enabled, 
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                )
+            )
         } else {
-            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
+                Text(value, fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            }
         }
     }
 }
@@ -278,46 +278,8 @@ private fun ArchiveCommandSection(viewModel: AppViewModel, primaryColor: Color) 
     }
 }
 
-@Composable
-private fun StreamingIntakeSection(viewModel: AppViewModel, primaryColor: Color) {
-    HardwareSectionCard("STREAM INTAKE PROTOCOL", icon = Icons.Default.CloudDownload) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("NETWORK INGESTION", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("HLS / MP4 / MP3 Feeds", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
-            }
-            Button(onClick = { /* show intake dialog */ }, shape = RoundedCornerShape(12.dp)) {
-                Text("INTAKE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
 
-@Composable
-private fun HardwareFooter() {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("WORKSTATION REGISTRY SECURE: SHA-256 VERIFIED", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f), fontWeight = FontWeight.Black)
-        Text("ENCRYPTION: AES-256-GCM [HARDWARE ACCELERATED]", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), modifier = Modifier.padding(top = 4.dp))
-        Text("pEQ KERNEL v4.9.5-STABLE", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), modifier = Modifier.padding(top = 8.dp))
-    }
-}
 
-@Composable
-private fun JniTelemetryTerminal(viewModel: AppViewModel, primaryColor: Color) {
-    Surface(
-        color = Color.Black,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().height(100.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())) {
-            Text("pEQ@KERNEL:~$ uptime", color = Color.Green, fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-            Text("10:42:01 up 12 days, 3:14, 1 user, load average: 0.12, 0.08, 0.05", color = Color.White.copy(0.7f), fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-            Text("pEQ@KERNEL:~$ jni --trace --buffer=4096", color = Color.Green, fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-            Text("[INFO] JNI Trace active. Latency: 24.2ms. Buffer: 1024 frames.", color = primaryColor, fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-            Text("[DEBUG] NeuralEngine thread priority: HIGH (RRT)", color = Color.White.copy(0.5f), fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-        }
-    }
-}
 
 @Composable
 private fun HardwareRegistrySection(viewModel: AppViewModel, primaryColor: Color) {

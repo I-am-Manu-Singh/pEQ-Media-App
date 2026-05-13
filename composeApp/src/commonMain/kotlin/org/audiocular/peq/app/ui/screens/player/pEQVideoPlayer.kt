@@ -42,7 +42,8 @@ import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.pEQBackHandler
 import org.audiocular.peq.app.ui.components.*
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
+import org.audiocular.peq.app.ui.viewmodel.cycleRotation
 import kotlin.time.TimeSource
 
 @OptIn(
@@ -701,7 +702,6 @@ private fun ImmersiveControlsRow(viewModel: AppViewModel, item: pEQMediaItem) {
         TransmissionTelemetry(viewModel = viewModel, item = item)
         MiniControlButton(icon = Icons.Default.Audiotrack, active = viewModel.showAudioTrackConsole.value) { viewModel.showAudioTrackConsole.value = true }
         MiniControlButton(icon = Icons.Default.Subtitles, active = viewModel.showSubtitleConsole.value) { viewModel.toggleSubtitleConsole() }
-        MiniControlButton(icon = Icons.Default.Lyrics, active = false) { viewModel.fetchLyricsNative() }
         MiniControlButton(icon = Icons.AutoMirrored.Filled.List, active = viewModel.isChaptersVisible.value) { viewModel.isChaptersVisible.value = true }
         MiniControlButton(icon = Icons.AutoMirrored.Filled.QueueMusic) { viewModel.showQueueDrawer.value = true }
         MiniControlButton(icon = Icons.AutoMirrored.Filled.PlaylistAdd) { 

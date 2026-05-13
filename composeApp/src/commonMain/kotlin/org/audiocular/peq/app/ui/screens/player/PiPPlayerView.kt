@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.data.MediaType
 import org.audiocular.peq.app.data.pEQMediaItem
 import org.audiocular.peq.app.ui.components.pEQImage
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 
 @Composable
 fun PiPPlayerView(viewModel: AppViewModel, item: pEQMediaItem) {

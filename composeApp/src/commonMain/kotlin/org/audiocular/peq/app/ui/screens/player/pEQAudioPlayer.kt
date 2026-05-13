@@ -29,7 +29,12 @@ import kotlinx.coroutines.launch
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.ui.components.*
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
+import org.audiocular.peq.app.ui.viewmodel.toggleLyrics
+import org.audiocular.peq.app.ui.viewmodel.toggleLockScreenMode
+import org.audiocular.peq.app.ui.viewmodel.cyclePlaybackSpeed
+import org.audiocular.peq.app.ui.viewmodel.toggleShuffle
+import org.audiocular.peq.app.ui.viewmodel.cycleRepeatMode
 import org.audiocular.peq.app.ui.components.pEQDesign
 import org.audiocular.peq.app.data.RepeatMode
 import androidx.compose.foundation.shape.CircleShape

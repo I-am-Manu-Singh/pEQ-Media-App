@@ -1,0 +1,149 @@
+package org.audiocular.peq.app.ui.components
+
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.audiocular.peq.app.ui.viewmodel.*
+import androidx.compose.ui.graphics.Color
+/**
+ * Global persistent widgets for the pEQ Workstation.
+ */
+
+@Composable
+fun VolumeControlSlider(
+    viewModel: AppViewModel,
+    modifier: Modifier = Modifier
+) {
+    val volume = viewModel.masterVolume.value
+
+    val volumeIcon = when {
+        volume > 0.5f -> Icons.AutoMirrored.Filled.VolumeUp
+        volume > 0f -> Icons.AutoMirrored.Filled.VolumeDown
+        else -> Icons.AutoMirrored.Filled.VolumeMute
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.06f))
+    ) {
+        Row(
+            modifier = Modifier.wrapContentWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = volumeIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Slider(
+                value = volume,
+                onValueChange = { viewModel.masterVolume.value = it },
+                modifier = Modifier.width(140.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                )
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = "${(volume * 100).toInt()}%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(42.dp),
+                textAlign = TextAlign.End
+            )
+        }
+    }
+}
+
+@Composable
+fun NowPlayingTelemetryCard(viewModel: AppViewModel, primaryColor: Color = MaterialTheme.colorScheme.primary) {
+    val currentItem by viewModel.currentMediaItem
+    val peakLevel by viewModel.peakLevelDb
+    
+    pEQGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = primaryColor.copy(alpha = 0.1f)
+            ) {
+                if (currentItem?.thumbnail != null) {
+                    pEQImage(data = currentItem?.thumbnail, modifier = Modifier.fillMaxSize())
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+    imageVector = Icons.Filled.GraphicEq,
+    contentDescription = null,
+    tint = primaryColor
+)
+                    }
+                }
+            }
+            
+            Spacer(Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(currentItem?.title ?: "SYSTEM IDLE", fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(currentItem?.subtitle ?: "No signal detected", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 1)
+            }
+            
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
+                Text("${peakLevel.toInt()} dB", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (peakLevel > -3f) Color.Red else primaryColor)
+                Spacer(Modifier.height(4.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Color.Black.copy(0.2f), CircleShape)) {
+                    val progress = ((peakLevel + 60f) / 60f).coerceIn(0f, 1f)
+                    Box(modifier = Modifier.fillMaxWidth(progress).fillMaxHeight().background(if (peakLevel > -3f) Color.Red else primaryColor, CircleShape))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LiveSpectrumVisualizer(viewModel: AppViewModel, height: androidx.compose.ui.unit.Dp = 60.dp, primaryColor: Color = MaterialTheme.colorScheme.primary) {
+    val rtaData by viewModel.rtaData
+    
+    Box(modifier = Modifier.fillMaxWidth().height(height).background(Color.Black.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).padding(8.dp)) {
+        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
+            rtaData.forEach { level ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(level.coerceIn(0.05f, 1f))
+                        .background(primaryColor.copy(alpha = 0.6f), RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+                )
+            }
+        }
+    }
+}

@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.data.MediaChapter
 import org.audiocular.peq.app.data.SubtitleSettings
 import org.audiocular.peq.app.data.SyncedLine
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -322,7 +322,7 @@ fun MetadataEditorContent(
                                     Icons.Default.Language
                             ) {
 
-                                viewModel.searchLyricsInWebView()
+                                viewModel.searchLyricsWeb()
                             }
                         }
 
@@ -336,7 +336,7 @@ fun MetadataEditorContent(
                                     Icons.Default.Download
                             ) {
 
-                                viewModel.fetchSubtitlesOnline()
+                                viewModel.fetchSubtitles()
                             }
                         }
 

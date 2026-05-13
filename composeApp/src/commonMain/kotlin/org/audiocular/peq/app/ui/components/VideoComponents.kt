@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.data.pEQMediaItem
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 
 @Composable
 fun VideoControlOverlay(
@@ -151,7 +151,7 @@ fun VideoControlOverlay(
                                 if (viewModel.availableSubtitleTracks.isNotEmpty()) {
                                     viewModel.toggleSubtitles(true)
                                 } else {
-                                    viewModel.fetchSubtitlesOnline(autoOpenSheet = true)
+                                    viewModel.fetchSubtitles(autoOpenEditor = true)
                                 }
                             }
                         }) {

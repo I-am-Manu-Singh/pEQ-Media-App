@@ -1756,7 +1756,34 @@ class AndroidAudioEngine(
     override fun setOscBroadcasting(enabled: Boolean) {}
     override fun enableZeroLatencyMonitoring(enabled: Boolean) {}
     override fun forceBluetoothCodec(codec: String) {}
-    override fun toggleVocalRemoval(enabled: Boolean) { isVocalSuppressionActive = enabled }
+    @RequiresApi(Build.VERSION_CODES.P)
+    override fun toggleVocalRemoval(enabled: Boolean) {
+        isVocalSuppressionActive = enabled
+        val dp = dynamicsProcessing ?: return
+        try {
+            val config = dp.config
+            val channelConfig = config.getChannelByChannelIndex(0)
+            
+            // Vocal frequency scoop (approx 500Hz to 4kHz)
+            // Bands: 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k
+            // Indices: 0, 1,  2,   3,   4,   5,  6,  7,  8,  9
+            val vocalIndices = listOf(4, 5, 6, 7)
+            vocalIndices.forEach { index ->
+                val band = channelConfig.preEq.getBand(index)
+                band.isEnabled = true
+                if (enabled) {
+                    band.gain = -15f // Heavy scoop for vocal removal
+                } else {
+                    // Restore from VM state if possible, or reset to 0
+                    band.gain = 0f 
+                }
+            }
+            dp.setAllChannelsTo(channelConfig)
+            println("pEQControl: [DSP] Vocal Removal -> $enabled")
+        } catch (e: Exception) {
+            println("pEQControl: [DSP] Vocal Removal Failed: ${e.message}")
+        }
+    }
     override fun togglePhaseInversion(enabled: Boolean) { setPhaseInversion(enabled) }
     
     override suspend fun saveEmbeddedLyrics(url: String, lyrics: List<SyncedLine>) {

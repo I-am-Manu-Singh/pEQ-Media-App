@@ -35,7 +35,7 @@ import org.audiocular.peq.app.audio.AndroidAudioEngine
 import org.audiocular.peq.app.audio.AudioEngineProvider
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.services.pEQMediaSessionService
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 import org.audiocular.peq.app.ui.components.*
 import org.audiocular.peq.app.security.initPermissionManager
 import org.audiocular.peq.app.security.getPermissionManager

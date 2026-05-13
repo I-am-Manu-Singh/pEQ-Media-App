@@ -17,6 +17,7 @@ import org.audiocular.peq.app.data.Preset
 import kotlin.math.sin
 import kotlin.math.abs
 import kotlin.math.exp
+import org.audiocular.peq.app.ui.viewmodel.*
 import androidx.compose.ui.geometry.Offset
 
 @Composable

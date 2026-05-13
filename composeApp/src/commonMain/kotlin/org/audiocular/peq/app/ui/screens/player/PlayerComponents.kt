@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 import org.audiocular.peq.app.ui.components.pEQDesign
 import org.audiocular.peq.app.ui.components.InfoChip
 import androidx.compose.ui.text.style.TextAlign
