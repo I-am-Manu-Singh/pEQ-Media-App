@@ -35,6 +35,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.alpha
+import org.jetbrains.compose.resources.painterResource
+import peq_app.composeapp.generated.resources.Res
+import peq_app.composeapp.generated.resources.app_icon
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -220,14 +224,32 @@ fun PlayerScreen(
 @Composable
 fun EmptyPlayerState(onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+        // Light Watermark Logo
+        Image(
+            painter = painterResource(Res.drawable.app_icon),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(64.dp)
+                .alpha(0.04f),
+            contentScale = ContentScale.Fit
+        )
+
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.padding(40.dp)) {
-            Surface(modifier = Modifier.size(120.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))) {
-                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.GraphicEq, null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary) }
+            Surface(
+                modifier = Modifier.size(80.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.GraphicEq, null, modifier = Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
+                }
             }
             Spacer(Modifier.height(32.dp))
             Text(text = "NEURAL STATION IDLE", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(12.dp))
-            Text(text = "The audio buffer is currently empty. Orchestrate your next session by selecting a track from the library.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, lineHeight = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+            Spacer(Modifier.height(8.dp))
+            Text(text = "The audio buffer is currently empty.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
             Spacer(Modifier.height(48.dp))
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(0.8f).height(56.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
                 Icon(Icons.Default.ArrowBack, null)

@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +53,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import org.audiocular.peq.app.ui.theme.pEQTheme
+import org.audiocular.peq.app.ui.theme.pEQAccent
+
+@OptIn(ExperimentalLayoutApi::class)
 /* ---------- UI TOKENS ---------- */
 
 object pEQDesign {
@@ -1931,6 +1939,10 @@ fun PlaylistPicker(
         mutableStateOf("")
     }
 
+    var showCreateDialogInPicker by remember {
+        mutableStateOf(false)
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
 
@@ -2018,33 +2030,69 @@ fun PlaylistPicker(
 
         Text(
             text = "Playlist Manager",
-
             fontSize = 22.sp,
-
             fontWeight = FontWeight.Black,
-
             maxLines = 1,
-
             overflow = TextOverflow.Ellipsis
         )
 
         Spacer(Modifier.height(4.dp))
 
         Text(
-            text =
-
-                if (totalItems == 1)
-                    "Add media into your collection."
-                else
-                    "Add these tracks into a playlist.",
-
+            text = if (totalItems == 1) "Add media into your collection." else "Add these tracks into a playlist.",
             fontSize = 12.sp,
-
             lineHeight = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 
-            color =
-                MaterialTheme.colorScheme
-                    .onSurfaceVariant
+    FilledTonalIconButton(
+        onClick = { showCreateDialogInPicker = true },
+        modifier = Modifier.size(42.dp),
+        colors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+        )
+    ) {
+        Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+    }
+
+    if (showCreateDialogInPicker) {
+        var tempName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateDialogInPicker = false },
+            title = { Text("NEW COLLECTION", fontWeight = FontWeight.Black) },
+            text = {
+                OutlinedTextField(
+                    value = tempName,
+                    onValueChange = { tempName = it },
+                    placeholder = { Text("Playlist Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (tempName.isNotBlank()) {
+                            viewModel.createPlaylist(tempName)
+                            selectedItems.forEach { item ->
+                                viewModel.addToPlaylist(tempName, item)
+                            }
+                            showCreateDialogInPicker = false
+                            onDismiss()
+                        }
+                    },
+                    enabled = tempName.isNotBlank()
+                ) {
+                    Text("CREATE & ADD", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialogInPicker = false }) {
+                    Text("CANCEL")
+                }
+            }
         )
     }
 
@@ -2171,7 +2219,7 @@ fun PlaylistPicker(
 
                         Text(
                             text =
-                                "Create your first playlist above.",
+                                "Initialize your first archive to begin.",
 
                             textAlign = TextAlign.Center,
 
@@ -2183,6 +2231,43 @@ fun PlaylistPicker(
                                 MaterialTheme.colorScheme
                                     .onSurfaceVariant
                         )
+
+                        Spacer(Modifier.height(28.dp))
+
+                        OutlinedTextField(
+                            value = newPlaylistName,
+                            onValueChange = { newPlaylistName = it },
+                            placeholder = { Text("Playlist Name", fontSize = 14.sp) },
+                            modifier = Modifier.fillMaxWidth(0.85f),
+                            shape = RoundedCornerShape(16.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (newPlaylistName.isNotBlank()) {
+                                    viewModel.createPlaylist(newPlaylistName)
+                                    selectedItems.forEach { item ->
+                                        viewModel.addToPlaylist(newPlaylistName, item)
+                                    }
+                                    newPlaylistName = ""
+                                    onDismiss()
+                                }
+                            },
+                            enabled = newPlaylistName.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(0.85f).height(52.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Default.Add, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("CREATE PLAYLIST", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                        }
                     }
                 }
 
@@ -2197,9 +2282,59 @@ fun PlaylistPicker(
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,
+                        top = 8.dp,
                         bottom = 36.dp
                     )
                 ) {
+                    item {
+                        Surface(
+                            onClick = { /* Expansion/Dialog handled by inline UI below */ },
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("Create New Playlist", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                
+                                Spacer(Modifier.height(12.dp))
+                                
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = newPlaylistName,
+                                        onValueChange = { newPlaylistName = it },
+                                        placeholder = { Text("New Name...", fontSize = 12.sp) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        singleLine = true,
+                                        textStyle = TextStyle(fontSize = 13.sp)
+                                    )
+                                    
+                                    Spacer(Modifier.width(8.dp))
+                                    
+                                    IconButton(
+                                        onClick = {
+                                            if (newPlaylistName.isNotBlank()) {
+                                                viewModel.createPlaylist(newPlaylistName)
+                                                selectedItems.forEach { item ->
+                                                    viewModel.addToPlaylist(newPlaylistName, item)
+                                                }
+                                                newPlaylistName = ""
+                                                onDismiss()
+                                            }
+                                        },
+                                        enabled = newPlaylistName.isNotBlank()
+                                    ) {
+                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
 
                     items(
                         items = playlists.keys.toList(),
@@ -2357,6 +2492,13 @@ fun PlaylistPicker(
 
     @Composable
     expect fun VideoSurface(modifier: Modifier, contentScale: androidx.compose.ui.layout.ContentScale)
+
+    @Composable
+    expect fun pEQBrowser(
+        url: String,
+        onClose: () -> Unit,
+        onStreamCaptured: (String) -> Unit = {}
+    )
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -3713,3 +3855,205 @@ fun AppViewModel.enqueueSplitJob(item: pEQMediaItem) {
 
 
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SettingsPanel(viewModel: AppViewModel) {
+    val selectedTheme by viewModel.selectedTheme
+    val selectedAccent by viewModel.selectedAccent
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.95f))
+            .statusBarsPadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+        ) {
+            // HEADER
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "WORKSTATION",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "Appearance",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                
+                FilledTonalIconButton(
+                    onClick = { viewModel.showSettings.value = false },
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, null)
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // THEME MODES
+            Text(
+                text = "SYSTEM THEME",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                pEQTheme.entries.forEach { theme ->
+                    ThemeModeCard(
+                        theme = theme,
+                        isSelected = selectedTheme == theme,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.updateTheme(theme) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(40.dp))
+
+            // ACCENTS
+            Text(
+                text = "NEURAL ACCENT",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                pEQAccent.entries.forEach { accent ->
+                    AccentPickerCard(
+                        accent = accent,
+                        isSelected = selectedAccent == accent,
+                        onClick = { viewModel.updateAccent(accent) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(40.dp))
+            
+            // ADDITIONAL OPTIONS
+            pEQGlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp)) {
+                    Text("Laboratory Features", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Enable experimental neural visualizers and DSP modules.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeCard(
+    theme: pEQTheme,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val backgroundColor = when (theme) {
+        pEQTheme.DARK -> Color(0xFF1A1C1E)
+        pEQTheme.OLED -> Color.Black
+        pEQTheme.LIGHT -> Color.White
+        pEQTheme.SYSTEM -> if (isSystemInDarkTheme()) Color(0xFF1A1C1E) else Color.White
+    }
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(100.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = backgroundColor,
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+        ),
+        tonalElevation = if (isSelected) 8.dp else 0.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = when (theme) {
+                        pEQTheme.DARK -> Icons.Default.DarkMode
+                        pEQTheme.OLED -> Icons.Default.BrightnessLow
+                        pEQTheme.LIGHT -> Icons.Default.LightMode
+                        pEQTheme.SYSTEM -> Icons.Default.SettingsSuggest
+                    },
+                    contentDescription = null,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = theme.name,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentPickerCard(
+    accent: pEQAccent,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(width = 120.dp, height = 64.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) accent.color else Color.Transparent
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(accent.color)
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = accent.label.split(" ").last(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}

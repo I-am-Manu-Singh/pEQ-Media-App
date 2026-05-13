@@ -92,3 +92,5 @@ interface AudioEngine {
     fun setSubtitlesEnabled(enabled: Boolean)
     fun release()
 }
+
+expect fun getAudioEngine(): AudioEngine

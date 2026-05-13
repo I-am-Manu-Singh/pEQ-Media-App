@@ -34,7 +34,6 @@ import org.audiocular.peq.app.ai.AndroidpEQStemSplitter
 import org.audiocular.peq.app.audio.AndroidAudioEngine
 import org.audiocular.peq.app.audio.AudioEngineProvider
 import org.audiocular.peq.app.data.*
-import org.audiocular.peq.app.receivers.pEQWidgetProvider
 import org.audiocular.peq.app.services.pEQMediaSessionService
 import org.audiocular.peq.app.ui.viewmodel.AppViewModel
 import org.audiocular.peq.app.ui.components.*
@@ -408,7 +407,7 @@ class MainActivity : ComponentActivity() {
                     appWidgetManager.getAppWidgetIds(
                         ComponentName(
                             this@MainActivity,
-                            pEQWidgetProvider::class.java
+                            org.audiocular.peq.app.widgets.NeuralGlanceWidgetReceiver::class.java
                         )
                     )
 
@@ -435,7 +434,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (::viewModel.isInitialized && viewModel.isPlaying.value) {
+        if (::viewModel.isInitialized && viewModel.isPlaying.value && viewModel.currentMediaItem.value?.type == MediaType.VIDEO) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val params = android.app.PictureInPictureParams.Builder()
                     .setAspectRatio(android.util.Rational(16, 9))

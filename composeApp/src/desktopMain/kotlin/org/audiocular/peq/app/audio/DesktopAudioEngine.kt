@@ -1,5 +1,4 @@
-package org.audiocular.peq.app
-
+package org.audiocular.peq.app.audio
 import androidx.compose.runtime.mutableStateOf
 import org.audiocular.peq.app.audio.AudioEngine
 import org.audiocular.peq.app.data.*
@@ -7,7 +6,7 @@ import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import java.io.File
 
-class VlcAudioEngine : AudioEngine {
+class DesktopAudioEngine : AudioEngine {
 
     val playerComponent =
         EmbeddedMediaPlayerComponent()

@@ -199,6 +199,40 @@ class AndroidFileScanner(private val context: Context) : pEQFileScanner {
                 // 🖼️ INDUSTRIAL ART RESOLVER: Standard MediaStore Album Art URI
                 val artUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId).toString()
 
+                // 📝 EMBEDDED LYRICS EXTRACTOR (P-12)
+              // 📝 EMBEDDED LYRICS EXTRACTOR (P-12)
+
+var embeddedLyrics: String? = null
+
+try {
+
+    val retriever =
+        android.media.MediaMetadataRetriever()
+
+    retriever.setDataSource(path)
+
+    /*
+     * Android does not reliably expose
+     * METADATA_KEY_LYRICS publicly.
+     *
+     * 31 = embedded lyrics metadata key
+     */
+
+    embeddedLyrics =
+        retriever.extractMetadata(31)
+
+    retriever.release()
+
+} catch (_: Exception) {
+
+    /*
+     * corrupted metadata
+     * unsupported container
+     * invalid headers
+     */
+
+}
+
                 val trackVal = it.getInt(trackCol)
                 val disc = if (trackVal >= 1000) trackVal / 1000 else 1
                 val trackNum = if (trackVal >= 1000) trackVal % 1000 else trackVal
@@ -220,7 +254,9 @@ class AndroidFileScanner(private val context: Context) : pEQFileScanner {
                     discNumber = disc,
                     dateAdded = it.getLong(dateAddedCol) * 1000,
                     dateModified = it.getLong(dateModCol) * 1000,
-                    thumbnail = artUri
+                    thumbnail = artUri,
+                    lyrics = embeddedLyrics,
+                    hasLyrics = !embeddedLyrics.isNullOrBlank()
                 ))
             }
         }

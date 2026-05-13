@@ -10,6 +10,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.audiocular.peq.app.data.SyncedLine
+import org.audiocular.peq.app.network.createHttpClient
 import kotlin.math.abs
 
 class LyricsRepository {
@@ -18,14 +19,12 @@ class LyricsRepository {
         ignoreUnknownKeys = true
     }
 
-    private val client = HttpClient {
+    private val client = createHttpClient().config {
         install(HttpTimeout) {
             requestTimeoutMillis = 5000
             connectTimeoutMillis = 5000
             socketTimeoutMillis = 5000
         }
-
-        expectSuccess = false
     }
 
     private val cache = mutableMapOf<String, List<SyncedLine>>()
@@ -35,6 +34,7 @@ class LyricsRepository {
         title: String,
         durationMs: Long? = null
     ): List<SyncedLine>? {
+        println("pEQControl: [LYRICS_REPO] fetchLyrics entry: artist=$artist, title=$title")
 
         val normalizedArtist = normalizeArtist(artist ?: "")
         val normalizedTitle = normalizeTitle(title)
@@ -52,6 +52,8 @@ class LyricsRepository {
         val url =
             "https://lrclib.net/api/search?q=${query.encodeURLPathPart()}"
 
+        println("pEQControl: [LYRICS_REPO] Searching: $url")
+
         return try {
 
             val response: String =
@@ -59,6 +61,8 @@ class LyricsRepository {
 
             val results =
                 json.decodeFromString<List<LrclibSearchResult>>(response)
+
+            println("pEQControl: [LYRICS_REPO] Found ${results.size} matches")
 
             if (results.isEmpty()) {
                 return null
@@ -103,6 +107,8 @@ class LyricsRepository {
             parsed
 
         } catch (e: Exception) {
+            println("pEQControl: [LYRICS_REPO] Error: ${e.message}")
+            e.printStackTrace()
             null
         }
     }
@@ -298,7 +304,7 @@ data class LrclibSearchResult(
     val artistName: String,
 
     @SerialName("duration")
-    val duration: Int? = null,
+    val duration: Double? = null,
 
     @SerialName("plainLyrics")
     val plainLyrics: String? = null,

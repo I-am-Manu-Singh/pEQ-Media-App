@@ -128,8 +128,8 @@ private fun StemConsoleSection(viewModel: AppViewModel, primaryColor: Color, ste
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
     ) {
         LazyRow(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            modifier = Modifier.fillMaxWidth().height(420.dp).padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             val activeStems = stems.ifEmpty { listOf("Vocals", "Drums", "Bass", "Piano", "Guitar", "Other") }
@@ -164,18 +164,18 @@ fun StemFaderColumn(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxHeight().width(64.dp)
+        modifier = Modifier.fillMaxHeight().width(56.dp)
     ) {
         // Solo / Mute Controls
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Surface(
                 onClick = onSoloToggle,
                 shape = RoundedCornerShape(4.dp),
-                color = if (isSolo) Color(0xFFFFB300) else MaterialTheme.colorScheme.surfaceVariant,
+                color = if (isSolo) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.size(24.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("S", fontSize = 10.sp, fontWeight = FontWeight.Black, color = if (isSolo) Color.Black else MaterialTheme.colorScheme.onSurface)
+                    Text("S", fontSize = 10.sp, fontWeight = FontWeight.Black, color = if (isSolo) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface)
                 }
             }
             Surface(
@@ -227,7 +227,7 @@ fun StemFaderColumn(
                     .graphicsLayer { rotationZ = -90f }
                     .requiredWidth(320.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
+                    thumbColor = MaterialTheme.colorScheme.onSurface,
                     activeTrackColor = Color.Transparent,
                     inactiveTrackColor = Color.Transparent
                 )

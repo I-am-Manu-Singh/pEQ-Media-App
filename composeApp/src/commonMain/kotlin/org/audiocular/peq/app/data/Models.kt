@@ -47,7 +47,8 @@ data class pEQMediaItem(
     val videoWidth: Int = 0,       // ✅ Required
     val videoHeight: Int = 0,      // ✅ Required
     val playCount: Int = 0,        // ✅ Tracking Popularity
-    val isStream: Boolean = false  // ✅ Web Streaming Support
+    val isStream: Boolean = false,  // ✅ Web Streaming Support
+    val lyrics: String? = null     // 📝 Embedded Lyrics
 ) {
     val fileName: String get() = path.substringAfterLast("/")
     val displaySize: String get() = "${sizeBytes / 1024 / 1024.0f}MB"

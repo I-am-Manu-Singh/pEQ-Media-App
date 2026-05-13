@@ -12,17 +12,17 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.audiocular.peq.app.network.createHttpClient
 
 class SubtitleRepository(
     private val apiKey: String
 ) {
-    private val client = HttpClient {
+    private val client = createHttpClient().config {
         install(HttpTimeout) {
             requestTimeoutMillis = 10_000
             connectTimeoutMillis = 10_000
             socketTimeoutMillis = 10_000
         }
-        expectSuccess = false
     }
 
     private val cache = mutableMapOf<String, List<SubtitleMatch>>()

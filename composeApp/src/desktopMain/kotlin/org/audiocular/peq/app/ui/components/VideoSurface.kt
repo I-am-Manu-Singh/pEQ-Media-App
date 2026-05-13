@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import org.audiocular.peq.app.LocalAppViewModel
-import org.audiocular.peq.app.VlcAudioEngine
+import org.audiocular.peq.app.DesktopAudioEngine
 
 @Composable
 actual fun VideoSurface(
@@ -17,7 +17,7 @@ actual fun VideoSurface(
 
     val engine =
         viewModel.audioEngine
-            as? VlcAudioEngine
+            as? DesktopAudioEngine
                 ?: return
 
     SwingPanel(

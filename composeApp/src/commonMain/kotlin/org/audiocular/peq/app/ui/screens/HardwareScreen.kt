@@ -49,8 +49,7 @@ fun HardwareScreen(viewModel: AppViewModel) {
         CalibrationMasterSection(viewModel, primaryColor)
         AdvancedProtocolsSection(viewModel, primaryColor)
 
-        // --- REPOSITORY & INGESTION ---
-        ArchiveCommandSection(viewModel, primaryColor)
+        // --- INGESTION ---
         StreamingIntakeSection(viewModel, primaryColor)
 
         // --- FOOTER ---

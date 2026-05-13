@@ -41,7 +41,7 @@ fun PlayerActionButton(
         shape = RoundedCornerShape(16.dp),
         colors = IconButtonDefaults.filledTonalIconButtonColors(
             containerColor = if (active) activeColor.copy(alpha = 0.12f) else Color.Transparent,
-            contentColor = if (active) activeColor else Color.White.copy(alpha = 0.7f)
+            contentColor = if (active) activeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
     ) {
         Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
@@ -61,7 +61,7 @@ fun MiniControlButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f),
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.size(20.dp)
         )
     }
@@ -80,7 +80,7 @@ fun SmallTransportButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             modifier = Modifier.size(22.dp)
         )
     }

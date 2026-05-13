@@ -170,6 +170,30 @@ kotlin {
                 implementation("net.java.dev.jna:jna-platform:5.14.0")
             }
         }
+
+        val iosX64Main by getting
+
+        val iosArm64Main by getting
+
+        val iosSimulatorArm64Main by getting
+
+        val iosMain by creating {
+
+            dependsOn(commonMain)
+
+            iosX64Main.dependsOn(this)
+
+            iosArm64Main.dependsOn(this)
+
+            iosSimulatorArm64Main.dependsOn(this)
+
+            dependencies {
+
+                implementation(libs.ktor.client.darwin)
+
+            }
+
+        }
     }
 }
 

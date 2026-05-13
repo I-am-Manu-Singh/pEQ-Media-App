@@ -8,8 +8,8 @@ import androidx.compose.ui.window.ComposeUIViewController
 
 fun MainViewController() = ComposeUIViewController {
 
-    val audioEngine = remember { org.audiocular.peq.app.audio.AudioEngine() }
-    val persistenceManager = remember { org.audiocular.peq.app.data.PersistenceManager() }
+    val audioEngine = remember { org.audiocular.peq.app.audio.getAudioEngine() }
+    val persistenceManager = remember { org.audiocular.peq.app.data.getPersistenceManager() }
 
     val viewModel = remember {
         AppViewModel(

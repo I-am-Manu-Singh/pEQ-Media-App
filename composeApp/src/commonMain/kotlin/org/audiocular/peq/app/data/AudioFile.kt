@@ -30,5 +30,6 @@ data class AudioFile(
     val channels: Int = 2,
     val dateAdded: Long = 0,
     val dateModified: Long = 0,
-    val thumbnail: String? = null
+    val thumbnail: String? = null,
+    val lyrics: String? = null
 )

@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -62,7 +64,7 @@ fun pEQLearnScreen(viewModel: AppViewModel) {
         // --- RHYTHM LAB & SEQUENCER ---
         RhythmLabSection(viewModel, primaryColor)
 
-        // --- PERFORMANCE ACADEMY ---
+        // --- PERFORMANCE ACADEMY & TUNER ---
         PerformanceAcademySection(viewModel, primaryColor)
 
         // --- NEURAL STEM PIPELINE ---
@@ -256,6 +258,14 @@ private fun FingerdrummingSection(viewModel: AppViewModel, primaryColor: Color) 
             }
         }
         
+        // Drum Section Labels
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+            Text("KICKS", modifier = Modifier.weight(1f), fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFFE91E63).copy(alpha = 0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("SNARES", modifier = Modifier.weight(1f), fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFC107).copy(alpha = 0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("PERC", modifier = Modifier.weight(1f), fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFF9C27B0).copy(alpha = 0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("LEAD", modifier = Modifier.weight(1f), fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFF4CAF50).copy(alpha = 0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+        
         Spacer(Modifier.height(8.dp))
         
         var activePad by remember { mutableStateOf(-1) }
@@ -271,8 +281,7 @@ private fun FingerdrummingSection(viewModel: AppViewModel, primaryColor: Color) 
                             val isTriggered = viewModel.sequencerTriggeredPads[label] == true
                             
                             DrumPadItem(
-                                kit = label.substringBefore("-", "???"),
-                                label = label.substringAfter("-"),
+                                label = label,
                                 index = index,
                                 primaryColor = primaryColor,
                                 isGuided = isGuided || isTriggered,
@@ -395,8 +404,49 @@ private fun RhythmLabSection(viewModel: AppViewModel, primaryColor: Color) {
 
 @Composable
 private fun PerformanceAcademySection(viewModel: AppViewModel, primaryColor: Color) {
-    LearnSectionCard("PERFORMANCE ACADEMY", icon = Icons.Default.MusicNote, info = "Fingerdrumming practice and rhythmic accuracy training.") {
-        FingerdrummingSection(viewModel, primaryColor)
+    LearnSectionCard("PERFORMANCE ACADEMY", icon = Icons.Default.MusicNote, info = "Fingerdrumming practice, strobe tuner, and rhythmic training.") {
+        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            FingerdrummingSection(viewModel, primaryColor)
+            
+            Divider(color = primaryColor.copy(alpha = 0.1f))
+            
+            Text("PRECISION STROBE TUNER", fontSize = 10.sp, fontWeight = FontWeight.Black, color = primaryColor)
+            StrobeTunerSection(viewModel, primaryColor)
+        }
+    }
+}
+
+@Composable
+private fun StrobeTunerSection(viewModel: AppViewModel, primaryColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = viewModel.detectedNote.value.ifBlank { "--" },
+            fontSize = 48.sp,
+            fontWeight = FontWeight.Black,
+            color = if (viewModel.centsDeviation.value in -5f..5f) Color(0xFF4CAF50) else primaryColor
+        )
+        
+        Spacer(Modifier.height(8.dp))
+        
+        // Strobe Wheel Simulation
+        Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cents = viewModel.centsDeviation.value
+                rotate(cents * 3.6f) {
+                    for (i in 0 until 12) {
+                        rotate(i * 30f) {
+                            drawLine(
+                                color = primaryColor.copy(alpha = 0.4f),
+                                start = androidx.compose.ui.geometry.Offset(size.width / 2, 0f),
+                                end = androidx.compose.ui.geometry.Offset(size.width / 2, 10.dp.toPx()),
+                                strokeWidth = 2.dp.toPx()
+                            )
+                        }
+                    }
+                }
+            }
+            Text("${viewModel.centsDeviation.value.toInt()}¢", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -587,7 +637,6 @@ private fun LearnSectionCard(
 
 @Composable
 private fun DrumPadItem(
-    kit: String,
     label: String,
     index: Int,
     primaryColor: Color,
@@ -597,93 +646,115 @@ private fun DrumPadItem(
     isActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val cleanLabel = if (label.contains("-")) label.substringAfter("-").uppercase() else label.uppercase()
+    val scope = rememberCoroutineScope()
     var isPressed by remember { mutableStateOf(false) }
     
+    // Color Coding Logic
+    val padColor = when {
+        cleanLabel.contains("KICK") || cleanLabel.contains("BD") -> Color(0xFFE91E63)
+        cleanLabel.contains("SNARE") || cleanLabel.contains("SD") || cleanLabel.contains("RIM") -> Color(0xFFFFC107)
+        cleanLabel.contains("HAT") || cleanLabel.contains("CH") || cleanLabel.contains("OH") || cleanLabel.contains("CYM") -> Color(0xFF00BCD4)
+        cleanLabel.contains("PERC") || cleanLabel.contains("TOM") || cleanLabel.contains("CLAP") -> Color(0xFF9C27B0)
+        else -> Color(0xFF4CAF50) // Leads / Vocals / Others
+    }
+
     val backgroundColor by animateColorAsState(
         targetValue = when {
-            isPressed || isActive -> primaryColor.copy(alpha = 0.9f)
-            isGuided -> primaryColor.copy(alpha = 0.4f)
-            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            isPressed -> padColor
+            isActive -> padColor.copy(alpha = 0.8f)
+            isGuided -> padColor.copy(alpha = 0.4f)
+            else -> MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp)
         },
-        animationSpec = if (isPressed || isActive) snap() else tween(300)
+        animationSpec = if (isPressed) snap() else (tween(400))
     )
 
-    val elevation by animateDpAsState(
-        targetValue = if (isPressed) 0.dp else 4.dp
+    // Motion & Pulse
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = if (isPressed) snap() else spring(dampingRatio = Spring.DampingRatioMediumBouncy)
     )
-    
+
     Surface(
         modifier = modifier
             .aspectRatio(1f)
+            .scale(scale)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onLongPress = { onLongClick() },
                     onPress = {
                         isPressed = true
                         onClick()
-                        tryAwaitRelease()
-                        isPressed = false
+                        try {
+                            awaitRelease()
+                        } finally {
+                            // Keep the flash for a minimum duration for visual impact
+                            scope.launch {
+                                delay(80)
+                                isPressed = false
+                            }
+                        }
                     }
                 )
             },
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = backgroundColor,
-        tonalElevation = elevation,
+        tonalElevation = if (isPressed) 0.dp else 8.dp,
         border = BorderStroke(
-            1.dp, 
-            if (isPressed || isGuided) primaryColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+            if (isPressed || isGuided || isActive) 2.dp else 1.dp,
+            if (isPressed || isGuided || isActive) padColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.1f)
         )
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Neural Glow Effect
-            if (isGuided || isPressed) {
+            // Neural Glow / Inner Shadow Simulation
+            if (isPressed || isGuided || isActive) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(primaryColor.copy(alpha = 0.3f), Color.Transparent)
+                                colors = listOf(padColor.copy(alpha = 0.4f), Color.Transparent)
                             )
                         )
                 )
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(6.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        text = kit.uppercase(), 
-                        fontSize = 7.sp, 
-                        fontWeight = FontWeight.Black, 
-                        color = (if (isPressed || isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.5f)
-                    )
-                    Text(
-                        text = (index + 1).toString().padStart(2, '0'), 
-                        fontSize = 7.sp, 
-                        fontWeight = FontWeight.Bold, 
-                        color = (if (isPressed || isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.4f)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(4.dp)
+            ) {
+                Text(
+                    text = cleanLabel,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (isPressed || isActive) Color.White else MaterialTheme.colorScheme.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1
+                )
+                
+                if (!isPressed && !isActive) {
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp, 2.dp)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(padColor.copy(alpha = 0.5f))
                     )
                 }
-                Spacer(Modifier.weight(1f))
-                val displayLabel = label.substringAfter("-").uppercase()
-                Text(
-                    text = displayLabel, 
-                    fontSize = 10.sp, 
-                    fontWeight = FontWeight.ExtraBold, 
-                    color = if (isPressed || isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "CH: ${(index + 1).toString().padStart(2, '0')}", 
-                    fontSize = 6.sp, 
-                    fontWeight = FontWeight.Black, 
-                    letterSpacing = 1.sp,
-                    color = (if (isPressed || isActive) MaterialTheme.colorScheme.onPrimary else primaryColor).copy(alpha = 0.3f)
-                )
             }
+            
+            // Channel Info
+            Text(
+                text = (index + 1).toString().padStart(2, '0'),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold,
+                color = (if (isPressed || isActive) Color.White else Color.Gray).copy(alpha = 0.3f)
+            )
         }
     }
 }

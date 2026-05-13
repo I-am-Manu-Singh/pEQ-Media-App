@@ -50,13 +50,6 @@ fun TuningScreen(viewModel: AppViewModel) {
         // --- NEURAL SIGNAL TOPOLOGY ---
         SignalTopologySection(viewModel, primaryColor)
 
-        // --- HARMONIC ANALYSIS SUITE ---
-        // --- MONITOR & ANALYSIS ---
-        SignalMonitorSection(viewModel, primaryColor)
-
-        // --- HARMONIC & RHYTHMIC ENGINE ---
-        HarmonicRhythmicSuite(viewModel, primaryColor)
-
         // --- TUNING & MASTER CLOCK ---
         TuningMasterSection(viewModel, primaryColor)
 
@@ -72,103 +65,12 @@ fun TuningScreen(viewModel: AppViewModel) {
     }
 }
 
-@Composable
-private fun SignalMonitorSection(viewModel: AppViewModel, primaryColor: Color) {
-    TuningSectionCard("SIGNAL MONITOR", Icons.Default.Visibility, info = "Real-time RTA spectrum and peak level telemetry.") {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // Level Meters
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LevelMeter("PRE-DSP", viewModel.preDspLevel.floatValue, modifier = Modifier.weight(1f))
-                LevelMeter("POST-DSP", viewModel.rtaData.value.maxOrNull() ?: 0f, modifier = Modifier.weight(1f))
-            }
-
-            // RTA Visualizer
-            Box(
-                modifier = Modifier
-                    .height(140.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black.copy(alpha = 0.2f))
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val data = viewModel.rtaData.value
-                    if (data.isNotEmpty()) {
-                        val barWidth = size.width / data.size
-                        data.forEachIndexed { i, value ->
-                            drawRect(
-                                brush = Brush.verticalGradient(listOf(primaryColor, Color.Transparent)),
-                                topLeft = androidx.compose.ui.geometry.Offset(i * barWidth, size.height * (1f - value.coerceIn(0f, 1f))),
-                                size = androidx.compose.ui.geometry.Size(barWidth - 2f, size.height * value.coerceIn(0f, 1f)),
-                                alpha = 0.5f
-                            )
-                        }
-                    }
-                }
-            }
-            
-            // Frequency Labels
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("20Hz", "500Hz", "5kHz", "20kHz").forEach { label ->
-                    Text(label, fontSize = 7.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), fontWeight = FontWeight.Black)
-                }
-            }
-
-            // DSP Load
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("DSP PROCESSING LOAD", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryColor)
-                Text("${(viewModel.dspProcessingLoad.value * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Black)
-            }
-            LinearProgressIndicator(
-                progress = { viewModel.dspProcessingLoad.value },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = if (viewModel.dspProcessingLoad.value > 0.8f) Color.Red else primaryColor
-            )
-        }
-    }
-}
-
- @Composable
-private fun LevelMeter(label: String, value: Float, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 8.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-            // Clip Indicator
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (value > 0.98f) Color.Red else Color.Transparent)
-                    .border(0.5.dp, if (value > 0.98f) Color.Red else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { value.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-            color = if (value > 0.9f) Color.Red else MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
-private fun HarmonicRhythmicSuite(viewModel: AppViewModel, primaryColor: Color) {
-    TuningSectionCard("HARMONIC & RHYTHMIC SUITE", Icons.Default.MusicNote, info = "Neural chord detection and master BPM clock.") {
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            // Chord & Key Visualizer
-            ChordVisualizer(
-                chord = viewModel.detectedChord.value,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TuningMasterSection(viewModel: AppViewModel, primaryColor: Color) {
-    TuningSectionCard("TUNING & MASTER CLOCK", Icons.Default.SettingsInputComponent, info = "Strobe tuner, scale mapping, and capo controls.") {
+    TuningSectionCard("TUNING & MASTER CLOCK", Icons.Default.SettingsInputComponent, info = "Scale mapping and capo controls.") {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            StrobeTunerSection(viewModel, primaryColor)
             TuningScaleSection(viewModel, primaryColor)
         }
     }
@@ -296,39 +198,6 @@ private fun ConvolutionDynamicsSection(viewModel: AppViewModel, primaryColor: Co
     }
 }
 
-@Composable
-private fun StrobeTunerSection(viewModel: AppViewModel, primaryColor: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = viewModel.detectedNote.value,
-            fontSize = 48.sp,
-            fontWeight = FontWeight.Black,
-            color = if (viewModel.centsDeviation.value in -5f..5f) Color(0xFF4CAF50) else primaryColor
-        )
-        
-        Spacer(Modifier.height(8.dp))
-        
-        // Strobe Wheel Simulation
-        Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val cents = viewModel.centsDeviation.value
-                rotate(cents * 3.6f) {
-                    for (i in 0 until 12) {
-                        rotate(i * 30f) {
-                            drawLine(
-                                color = primaryColor.copy(alpha = 0.4f),
-                                start = androidx.compose.ui.geometry.Offset(size.width / 2, 0f),
-                                end = androidx.compose.ui.geometry.Offset(size.width / 2, 10.dp.toPx()),
-                                strokeWidth = 2.dp.toPx()
-                            )
-                        }
-                    }
-                }
-            }
-            Text("${viewModel.centsDeviation.value.toInt()}¢", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

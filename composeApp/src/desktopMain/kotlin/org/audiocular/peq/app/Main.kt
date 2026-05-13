@@ -42,7 +42,7 @@ fun main() {
     application {
         val viewModel = remember {
             AppViewModel(
-                audioEngine = VlcAudioEngine(),
+                audioEngine = AndroidAudioEngine(),
                 persistenceManager = DesktopPersistenceManager(),
                 stemSplitter = null,
                 cloudDownloader = null

@@ -39,10 +39,12 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import kotlin.math.pow
+import kotlinx.coroutines.flow.first
 import org.audiocular.peq.app.pEQBackHandler
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.runtime.snapshotFlow
 
 @Composable
 fun NeuralAudioWorkstation(
@@ -364,100 +366,351 @@ fun PlayerTimeSlider(viewModel: AppViewModel) {
 private fun progressFraction(current: Long, total: Long): Float = (current / total.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
 
 @Composable
-private fun EmptyLyricsState(viewModel: AppViewModel) {
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Surface(modifier = Modifier.size(86.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(imageVector = Icons.Default.Lyrics, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-            }
+private fun EmptyLyricsState(
+    viewModel: AppViewModel
+) {
+
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "lyrics_loading"
+        )
+
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1800,
+                easing = LinearEasing
+            )
+        ),
+        label = "rotation"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+
+        Box(
+            modifier = Modifier
+                .size(84.dp)
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                        .copy(alpha = 0.18f),
+                    shape = CircleShape
+                )
+                .graphicsLayer {
+                    rotationZ = rotation
+                },
+            contentAlignment = Alignment.Center
+        ) {
+
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                strokeWidth = 3.dp,
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary
+                    .copy(alpha = 0.08f)
+            )
         }
-        Spacer(Modifier.height(32.dp))
-        Text(text = "NO LYRICS DISCOVERED", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(12.dp))
-        Text(text = "The neural engine was unable to extract synchronized temporal data for this track.", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { viewModel.isEditingLyrics.value = true }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.primary), modifier = Modifier.height(48.dp)) {
-                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("MANUAL SYNC", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            }
-            Button(onClick = { viewModel.webSearchLyrics() }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.primary), modifier = Modifier.height(48.dp)) {
-                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("WEB SEARCH", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            }
-        }
+
+        Spacer(Modifier.height(28.dp))
+
+        Text(
+            text = "Searching Lyrics",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = "Neural sync engine is analyzing temporal vocal data...",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium,
+            lineHeight = 22.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+                .copy(alpha = 0.7f)
+        )
     }
 }
 
 @Composable
-private fun LyricsVinylCard(viewModel: AppViewModel, modifier: Modifier = Modifier) {
+private fun LyricsVinylCard(
+    viewModel: AppViewModel,
+    modifier: Modifier = Modifier
+) {
     val lyrics = viewModel.syncedLyrics
     val listState = rememberLazyListState()
     val currentPosition = viewModel.currentPosition.value
-    var controlsVisible by remember { mutableStateOf(true) }
+
+    var controlsVisible by remember {
+        mutableStateOf(true)
+    }
 
     val currentLineIndex by remember(lyrics, currentPosition) {
-        derivedStateOf { lyrics.indexOfLast { it.timestampMs <= currentPosition }.coerceAtLeast(0) }
-    }
-    val currentLine = lyrics.getOrNull(currentLineIndex)
-    val nextLine = lyrics.getOrNull(currentLineIndex + 1)
-
-    val progressToNext by remember(currentPosition, currentLine, nextLine) {
         derivedStateOf {
-            if (currentLine == null || nextLine == null) 0f
-            else ((currentPosition - currentLine.timestampMs).toFloat() / (nextLine.timestampMs - currentLine.timestampMs).toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+            lyrics.indexOfLast {
+                it.timestampMs <= currentPosition
+            }.coerceAtLeast(0)
         }
     }
 
-    LaunchedEffect(controlsVisible, viewModel.isEditingLyrics.value) {
-        if (controlsVisible && !viewModel.isEditingLyrics.value) {
+    val currentLine = lyrics.getOrNull(currentLineIndex)
+    val nextLine = lyrics.getOrNull(currentLineIndex + 1)
+
+    val progressToNext by remember(
+        currentPosition,
+        currentLine,
+        nextLine
+    ) {
+        derivedStateOf {
+            if (currentLine == null || nextLine == null) {
+                0f
+            } else {
+                (
+                    (currentPosition - currentLine.timestampMs).toFloat() /
+                        (nextLine.timestampMs - currentLine.timestampMs)
+                            .toFloat()
+                            .coerceAtLeast(1f)
+                    ).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    LaunchedEffect(
+        controlsVisible,
+        viewModel.isEditingLyrics.value
+    ) {
+        if (
+            controlsVisible &&
+            !viewModel.isEditingLyrics.value
+        ) {
             delay(4000)
             controlsVisible = false
         }
     }
 
-    LaunchedEffect(currentLineIndex) {
-        if (lyrics.isNotEmpty() && currentLineIndex >= 0) {
-            listState.animateScrollToItem(index = (currentLineIndex - 1).coerceAtLeast(0), scrollOffset = 120)
-        }
-    }
+    /*
+     * FIXED AUTO SCROLL
+     */
+  LaunchedEffect(currentLineIndex) {
 
-    Box(modifier = modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { controlsVisible = !controlsVisible } }) {
+    if (
+        lyrics.isNotEmpty() &&
+        currentLineIndex >= 0
+    ) {
+
+        val targetIndex =
+            (currentLineIndex - 1)
+                .coerceAtLeast(0)
+
+        listState.scrollToItem(
+            index = targetIndex,
+            scrollOffset = 45
+        )
+    }
+}
+
+    Box(
+    modifier = modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(32.dp))
+        .background(Color.Transparent)
+        .border(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.onSurface.copy(
+                alpha = 0.08f
+            ),
+            shape = RoundedCornerShape(32.dp)
+        )
+  
+        .pointerInput(Unit) {
+            detectTapGestures {
+                controlsVisible = !controlsVisible
+            }
+        }
+){
+
         if (viewModel.isEditingLyrics.value) {
-            MetadataEditorContent(viewModel = viewModel, type = MetadataEditorType.LYRICS, isCompact = true, modifier = Modifier.fillMaxSize().padding(12.dp))
+
+            MetadataEditorContent(
+                viewModel = viewModel,
+                type = MetadataEditorType.LYRICS,
+                isCompact = true,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            )
+
         } else if (lyrics.isEmpty()) {
+
             EmptyLyricsState(viewModel)
+
         } else {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(26.dp), contentPadding = PaddingValues(start = 26.dp, end = 26.dp, top = 110.dp, bottom = 180.dp)) {
-                itemsIndexed(items = lyrics, key = { index, line -> "${line.text}_${line.timestampMs}_$index" }) { index, line ->
+LazyColumn(
+
+    state = listState,
+
+    modifier = Modifier.fillMaxSize()
+    .graphicsLayer {
+
+    compositingStrategy =
+
+        CompositingStrategy.Offscreen},
+
+    verticalArrangement = Arrangement.spacedBy(18.dp),
+
+    contentPadding = PaddingValues(
+
+        top = 48.dp,
+
+        bottom = 180.dp,
+
+        start = 28.dp,
+
+        end = 28.dp
+
+    )
+
+){
+
+                itemsIndexed(
+                    items = lyrics,
+                    key = { index, line ->
+                        "${line.text}_${line.timestampMs}_$index"
+                    }
+                ) { index, line ->
+
                     val isActive = index == currentLineIndex
+
                     LyricLineItem(
                         line = line,
                         isActive = isActive,
                         progressToNext = progressToNext,
-                        onClick = { viewModel.seekTo(line.timestampMs) }
+                        onClick = {
+                            viewModel.seekTo(line.timestampMs)
+                        }
                     )
                 }
             }
-            Box(modifier = Modifier.fillMaxWidth().height(90.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.surface, Color.Transparent))))
-            Box(modifier = Modifier.fillMaxWidth().height(120.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surface))))
+
+            /*
+             * SOFT TOP FADE
+             */
+            // Box(
+            //     modifier = Modifier
+            //         .fillMaxWidth()
+            //         .height(120.dp)
+            //         .align(Alignment.TopCenter)
+            //         .background(
+            //             Brush.verticalGradient(
+            //                 colors = listOf(
+            //                     MaterialTheme.colorScheme.background,
+            //                     MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+            //                     Color.Transparent
+            //                 )
+            //             )
+            //         )
+            // )
+
+            // /*
+            //  * SOFT BOTTOM FADE
+            //  */
+            // Box(
+            //     modifier = Modifier
+            //         .fillMaxWidth()
+            //         .height(140.dp)
+            //         .align(Alignment.BottomCenter)
+            //         .background(
+            //             Brush.verticalGradient(
+            //                 colors = listOf(
+            //                     Color.Transparent,
+            //                     MaterialTheme.colorScheme.background.copy(alpha = 0.88f),
+            //                     MaterialTheme.colorScheme.background
+            //                 )
+            //             )
+            //         )
+            // )
         }
 
-        AnimatedVisibility(modifier = Modifier.align(Alignment.TopCenter), visible = controlsVisible && !viewModel.isEditingLyrics.value, enter = fadeIn() + slideInVertically { -it / 2 }, exit = fadeOut() + slideOutVertically { -it / 2 }) {
-            Surface(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.82f), tonalElevation = 8.dp, shadowElevation = 12.dp) {
-                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SmallActionButton(icon = Icons.Default.Search) { viewModel.webSearchLyrics() }
-                    SmallActionButton(icon = Icons.Default.Language) { viewModel.fetchLyrics(autoOpenEditor = false) }
-                    SmallActionButton(icon = Icons.Default.FolderOpen) { viewModel.requestLyricsPicker { } }
-                    SmallActionButton(icon = Icons.Default.Edit) { viewModel.isEditingLyrics.value = true }
+        AnimatedVisibility(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 18.dp),
+            visible = controlsVisible &&
+                !viewModel.isEditingLyrics.value,
+            enter = fadeIn() +
+                slideInVertically {
+                    -it / 2
+                },
+            exit = fadeOut() +
+                slideOutVertically {
+                    -it / 2
+                }
+        ) {
+
+            Surface(
+                modifier = Modifier.padding(
+                    horizontal = 16.dp,
+                    vertical = 10.dp
+                ),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                    .copy(alpha = 0.72f),
+                tonalElevation = 4.dp,
+                shadowElevation = 2.dp,
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)
+                )
+            ) {
+
+                Row(
+                    modifier = Modifier.padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    SmallActionButton(
+                        icon = Icons.Default.Search
+                    ) {
+                        viewModel.webSearchLyrics()
+                    }
+
+                    SmallActionButton(
+                        icon = Icons.Default.Language
+                    ) {
+                        viewModel.fetchLyrics(
+                            autoOpenEditor = false
+                        )
+                    }
+
+                    SmallActionButton(
+                        icon = Icons.Default.FolderOpen
+                    ) {
+                        viewModel.requestLyricsPicker { }
+                    }
+
+                    SmallActionButton(
+                        icon = Icons.Default.Edit
+                    ) {
+                        viewModel.isEditingLyrics.value = true
+                    }
                 }
             }
         }
     }
 }
-
-
 
 @Composable
 fun TransportControlsRestored(viewModel: AppViewModel) {
@@ -514,9 +767,11 @@ fun NeuralBottomControlsRestored(viewModel: AppViewModel) {
         }
         SmallTransportButton(icon = Icons.AutoMirrored.Filled.PlaylistAdd, active = viewModel.isPlaylistPickerShown.value) { viewModel.isPlaylistPickerShown.value = true }
         SmallTransportButton(icon = Icons.AutoMirrored.Filled.QueueMusic, active = viewModel.showQueueDrawer.value) { viewModel.showQueueDrawer.value = true }
-        SmallTransportButton(icon = Icons.Default.Lyrics, active = viewModel.isLyricsVisible.value) {
-            viewModel.toggleLyrics()
-            if (viewModel.isLyricsVisible.value && viewModel.syncedLyrics.isEmpty()) viewModel.fetchLyrics()
+        if (viewModel.currentMediaItem.value?.type != MediaType.VIDEO) {
+            SmallTransportButton(icon = Icons.Default.Lyrics, active = viewModel.isLyricsVisible.value) {
+                viewModel.toggleLyrics()
+                if (viewModel.isLyricsVisible.value && viewModel.syncedLyrics.isEmpty()) viewModel.fetchLyrics()
+            }
         }
         SmallTransportButton(icon = Icons.Default.Speed, active = viewModel.playbackSpeed.value != 1f) { viewModel.cyclePlaybackSpeed() }
         SmallTransportButton(icon = Icons.Default.VpnKey, active = viewModel.isLockScreenMode.value) {
@@ -556,18 +811,20 @@ fun DynamicAmbientBackdrop(dominantColor: Color, intensity: Float = 0f) {
 @Composable
 fun rememberArtworkGradient(item: pEQMediaItem): List<Color> {
     val primary = MaterialTheme.colorScheme.primary
-    return remember(item.thumbnail, item.id, primary) {
-        val seed = (item.title + item.artist).hashCode()
+    return remember(item.thumbnail, item.id, primary, item.title, item.artist) {
+        // Derive hue from metadata for pseudo-relevant coloring
+        val seed = (item.title + item.artist + (item.thumbnail ?: "")).hashCode()
         val hue = (seed % 360).let { if (it < 0) it + 360 else it }.toFloat()
         
-        // Generate high-fidelity neural gradients
-        val dominant = Color.hsl(hue, 0.45f, 0.22f)
-        val secondary = Color.hsl((hue + 35) % 360, 0.38f, 0.14f)
-        val tertiary = Color.hsl((hue + 70) % 360, 0.25f, 0.08f)
+        // Dynamic saturations based on track energy (simulated)
+        val dominant = Color.hsl(hue, 0.55f, 0.18f)
+        val secondary = Color.hsl((hue + 45) % 360, 0.42f, 0.12f)
+        val tertiary = Color.hsl((hue + 90) % 360, 0.35f, 0.06f)
         
         listOf(dominant, secondary, tertiary, Color.Black)
     }
 }
+
 @Composable
 fun LyricLineItem(
     line: SyncedLine,
@@ -575,14 +832,95 @@ fun LyricLineItem(
     progressToNext: Float,
     onClick: () -> Unit
 ) {
-    val scale by animateFloatAsState(targetValue = if (isActive) 1.015f else 1f, animationSpec = spring(dampingRatio = 0.9f), label = "lyrics_scale")
-    val alpha by animateFloatAsState(targetValue = if (isActive) 1f else 0.38f, animationSpec = tween(220), label = "lyrics_alpha")
-    val animatedProgress by animateFloatAsState(targetValue = if (isActive) progressToNext else 0f, animationSpec = tween(120), label = "lyrics_progress")
 
-    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }.clickable { onClick() }.padding(vertical = 2.dp)) {
-        Text(text = line.text, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.headlineMedium.copy(fontSize = if (isActive) 29.sp else 22.sp, fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold, lineHeight = 42.sp), color = if (isActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1.02f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.92f,
+            stiffness = 400f
+        ),
+        label = "lyrics_scale"
+    )
+
+    val alpha by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.42f,
+        animationSpec = tween(250),
+        label = "lyrics_alpha"
+    )
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (isActive) progressToNext else 0f,
+        animationSpec = tween(140),
+        label = "lyrics_progress"
+    )
+
+    val animatedColor by animateColorAsState(
+        targetValue =
+            if (isActive) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        animationSpec = tween(220),
+        label = "lyrics_color"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+          
+            .clickable {
+                onClick()
+            }
+            .padding(vertical = 4.dp)
+    ) {
+
+        /*
+         * BASE TEXT
+         */
+        Text(
+            text = line.text,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                lineHeight = 40.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface.copy(
+                alpha = if (isActive) 0.22f else 0.55f
+            )
+        )
+
+        /*
+         * PROGRESS FILL TEXT
+         */
         if (isActive) {
-            Text(text = line.text, modifier = Modifier.fillMaxWidth().drawWithContent { val progressWidth = size.width * animatedProgress; clipRect(left = 0f, top = 0f, right = progressWidth, bottom = size.height) { this@drawWithContent.drawContent() } }, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 29.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 42.sp), color = MaterialTheme.colorScheme.primary)
+
+            Text(
+                text = line.text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawWithContent {
+
+                        val progressWidth =
+                            size.width * animatedProgress
+
+                        clipRect(
+                            left = 0f,
+                            top = 0f,
+                            right = progressWidth,
+                            bottom = size.height
+                        ) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 40.sp
+                ),
+                color = animatedColor
+            )
         }
     }
 }

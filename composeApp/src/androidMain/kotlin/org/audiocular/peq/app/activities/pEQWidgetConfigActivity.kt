@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.audiocular.peq.app.receivers.pEQWidgetProvider
+import org.audiocular.peq.app.widgets.NeuralGlanceWidgetReceiver
 
 class pEQWidgetConfigActivity : ComponentActivity() {
 
@@ -396,14 +396,14 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             manager.getAppWidgetIds(
                                 ComponentName(
                                     context,
-                                    pEQWidgetProvider::class.java
+                                    NeuralGlanceWidgetReceiver::class.java
                                 )
                             )
 
                         val updateIntent =
                             Intent(
                                 context,
-                                pEQWidgetProvider::class.java
+                                NeuralGlanceWidgetReceiver::class.java
                             ).apply {
 
                                 action =

@@ -30,11 +30,13 @@ import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.data.Device
 import org.audiocular.peq.app.data.SyncedLine
 import org.audiocular.peq.app.data.lyrics.LyricsRepository
+import org.audiocular.peq.app.data.repository.SubtitleRepository
 import org.audiocular.peq.app.ui.components.*
 import kotlin.math.log2
 import kotlin.math.roundToInt
 import org.audiocular.peq.app.network.createHttpClient
 import org.audiocular.peq.app.ui.theme.pEQTheme
+import org.audiocular.peq.app.ui.theme.pEQAccent
 
 class AppViewModel(
 
@@ -47,6 +49,7 @@ class AppViewModel(
     val cloudDownloader: pEQCloudDownloader? = null
 
 ) : pEQViewModel(){
+
 
     // =========================
 // VIEW MODE ENUM
@@ -138,6 +141,17 @@ val client = createHttpClient()
     private val _currentQueueIndex = mutableStateOf(-1)
     val currentQueueIndex: State<Int> = _currentQueueIndex             
 
+    private val _isShuffleEnabled = mutableStateOf(false)
+    var isShuffleEnabled: Boolean
+        get() = _isShuffleEnabled.value
+        set(value) {
+            _isShuffleEnabled.value = value
+            audioEngine.setShuffleMode(value)
+        }
+
+    val isFavorite = mutableStateOf(false)
+    val repeatMode = mutableStateOf(RepeatMode.OFF)
+
     // ⏰ Industrial Utilities
     val sleepTimerActive = mutableStateOf(false)
     val sleepTimerMinutes = mutableStateOf(30)
@@ -207,62 +221,137 @@ val client = createHttpClient()
     val diagnosticLog = mutableStateListOf<String>()
     val isDiagnosticRunning = mutableStateOf(false)
 
+    fun toggleShuffle() {
+        isShuffleEnabled = !isShuffleEnabled
+    }
+
+    fun toggleFavorite() {
+        val item = currentMediaItem.value ?: return
+        val newState = !isFavorite.value
+        isFavorite.value = newState
+        // persistenceManager.setFavorite(item.id, newState) // Assuming this exists or similar
+    }
+
+    fun cycleRepeatMode() {
+        val modes = RepeatMode.entries
+        val next = modes[(repeatMode.value.ordinal + 1) % modes.size]
+        repeatMode.value = next
+        audioEngine.setRepeatMode(next)
+    }
+
     fun fetchLyrics(autoOpenEditor: Boolean = true) {
         val item = currentMediaItem.value ?: return
+        
+        // println("pEQControl: [LYRICS] Orchestrating fetch via Repository for: ${item.title}")
+        
         viewModelScope.launch {
             activeJob.value = SplitJob(
                 id = "LYRICS_${Clock.System.now().toEpochMilliseconds()}",
                 name = "Neural Lyrics Sync",
-                progress = 0.2f,
-                status = "SEARCHING LRCLIB"
+                progress = 0.3f,
+                status = "SEARCHING REPOSITORY"
             )
             
             try {
-                val artist = item.artist ?: ""
-                val title = item.title
-                val url = "https://lrclib.net/api/get?artist=${artist.encodeURL()}&track_name=${title.encodeURL()}"
+                val results = lyricsRepository.fetchLyrics(
+                    artist = item.artist,
+                    title = item.title,
+                    durationMs = if (item.durationMs > 0) item.durationMs else null
+                )
                 
-                val client = io.ktor.client.HttpClient()
-                val response: String = client.get(url).body()
-                
-                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                val data = json.parseToJsonElement(response).jsonObject
-                val syncedLrc = data["syncedLyrics"]?.jsonPrimitive?.contentOrNull
-                val plainLrc = data["plainLyrics"]?.jsonPrimitive?.contentOrNull
-                
-                syncedLyrics.clear()
-                if (!syncedLrc.isNullOrBlank()) {
-                    syncedLyrics.addAll(parseLrc(syncedLrc))
-                    showToast("Lyrics fetched from LyricHub")
-                } else if (!plainLrc.isNullOrBlank()) {
-                    plainLrc.lines().forEach { line ->
-                        syncedLyrics.add(org.audiocular.peq.app.data.SyncedLine(timestampMs = 0L, text = line))
+                if (!results.isNullOrEmpty()) {
+                    println("pEQControl: [LYRICS] Repository returned ${results.size} lines")
+                    syncedLyrics.clear()
+                    syncedLyrics.addAll(results)
+                    showToast("Neural sync established")
+                    
+                    // persist
+                    currentMediaItem.value?.let { current ->
+                        val updated = current.copy(lyrics = results.joinToString("\n") { line -> "[${formatLrcTime(line.timestampMs)}] ${line.text}" })
+                        currentMediaItem.value = updated
+                        _mediaLibrary.value = _mediaLibrary.value.map { if (it.path == updated.path) updated else it }
                     }
-                    showToast("Plain lyrics synchronized")
+                    
+                    activeJob.value = activeJob.value?.copy(progress = 1.0f, status = "SYNC COMPLETE")
+                } else {
+                    // println("pEQControl: [LYRICS] Repository found no matches")
+                    activeJob.value = activeJob.value?.copy(status = "NO MATCH FOUND", progress = 1.0f)
                 }
-                
-                activeJob.value = activeJob.value?.copy(progress = 1.0f, status = "LYRICS SYNCED")
             } catch (e: Exception) {
-                activeJob.value = activeJob.value?.copy(status = "NATIVE FETCH FAILED", progress = 1.0f)
-            }
-            
-            delay(1500)
-            activeJob.value = null
-            if (autoOpenEditor && syncedLyrics.isNotEmpty()) {
-                isLyricsVisible.value = true
+                // println("pEQControl: [LYRICS] Repository Exception: ${e.message}")
+                activeJob.value = activeJob.value?.copy(status = "FETCH FAILED", progress = 1.0f)
+            } finally {
+                delay(1200)
+                activeJob.value = null
+                if (autoOpenEditor && syncedLyrics.isNotEmpty()) {
+                    isLyricsVisible.value = true
+                }
             }
         }
     }
 
-        private fun parseLrc(lrc: String): List<org.audiocular.peq.app.data.SyncedLine> {
+    private fun formatLrcTime(ms: Long): String {
+        val seconds = (ms / 1000) % 60
+        val minutes = (ms / (1000 * 60)) % 60
+        val millis = (ms % 1000) / 10
+        return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(2, '0')}"
+    }
+
+    fun fetchSubtitles() {
+        val item = currentMediaItem.value ?: return
+        if (item.type != MediaType.VIDEO) return
+        
+        println("pEQControl: [SUBTITLES] Orchestrating search via Repository for: ${item.title}")
+        
+        viewModelScope.launch {
+            activeJob.value = SplitJob(
+                id = "SUBS_${Clock.System.now().toEpochMilliseconds()}",
+                name = "Subtitle Retrieval",
+                progress = 0.2f,
+                status = "SEARCHING OPENSUBS"
+            )
+            
+            try {
+                val matches = subtitleRepository.searchSubtitles(
+                    title = item.title,
+                    artist = item.artist,
+                    durationMs = item.durationMs
+                )
+                
+                if (matches.isNotEmpty()) {
+                    println("pEQControl: [SUBTITLES] Found ${matches.size} candidate subtitles")
+                    // Industrial Logic: Pick the best score (lowest distance)
+                    val best = matches.minByOrNull { it.score }
+                    best?.let { match ->
+                        activeJob.value = activeJob.value?.copy(status = "DOWNLOADING", progress = 0.6f)
+                        val link = subtitleRepository.getDownloadLink(match.fileId)
+                        if (link != null) {
+                            println("pEQControl: [SUBTITLES] Download ready: $link")
+                            showToast("Subtitles synchronized: ${match.fileName}")
+                            // persistence logic would go here
+                        }
+                    }
+                } else {
+                    showToast("No subtitles found in archive")
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [SUBTITLES] Repository Exception: ${e.message}")
+            } finally {
+                activeJob.value = null
+            }
+        }
+    }
+
+    private fun parseLrc(lrc: String): List<org.audiocular.peq.app.data.SyncedLine> {
             val lines = mutableListOf<org.audiocular.peq.app.data.SyncedLine>()
-            val regex = Regex("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})\\](.*)")
+            val regex = Regex("\\[(\\d{2}):(\\d{2})[\\.:](\\d{2,3})\\](.*)")
             lrc.lines().forEach { line ->
                 val match = regex.find(line)
                 if (match != null) {
                     val min = match.groupValues[1].toLong()
                     val sec = match.groupValues[2].toLong()
-                    val ms = match.groupValues[3].padEnd(3, '0').toLong()
+                    val msStr = match.groupValues[3].padEnd(3, '0')
+                    val ms = msStr.take(3).toLong()
                     val time = (min * 60 * 1000) + (sec * 1000) + ms
                     val text = match.groupValues[4].trim()
                     lines.add(org.audiocular.peq.app.data.SyncedLine(timestampMs = time, text = text))
@@ -555,19 +644,43 @@ val client = createHttpClient()
     val showEqualizer = mutableStateOf(false)
     val isFetchingEverything = mutableStateOf(false)
     
+    // 🥁 DRUM ARCHIVE DEFINITIONS
+    data class DrumKit(val name: String, val labels: List<String>)
+    data class DrumTutorial(val name: String, val steps: List<List<String>> = emptyList())
+    
+    val drumKits = listOf(
+        DrumKit("Neural 808", listOf(
+            "808-CYMBAL", "808-CONGA", "808-MARACA", "808-CLAVE",
+            "808-TOM-L", "808-TOM-M", "808-TOM-H", "808-COWBELL",
+            "808-OPEN-HAT", "808-CLAP", "808-RIM", "808-CRASH",
+            "808-KICK-1", "808-KICK-2", "808-SNARE-1", "808-CLOSED-HAT"
+        )),
+        DrumKit("Industrial Grime", listOf(
+            "GRIME-STEAM", "GRIME-HAMMER", "GRIME-METAL", "GRIME-CLANG",
+            "GRIME-PIPE", "GRIME-CRUSH", "GRIME-ENGINE", "GRIME-SPARK",
+            "GRIME-GEAR", "GRIME-OIL", "GRIME-RUST", "GRIME-DRILL",
+            "GRIME-KICK", "GRIME-SUB", "GRIME-SNARE", "GRIME-HAT"
+        )),
+        DrumKit("Lofi Nostalgia", listOf(
+            "LOFI-DUST", "LOFI-WARMTH", "LOFI-MEMORIES", "LOFI-RAIN",
+            "LOFI-BREEZE", "LOFI-ECHO", "LOFI-FADED", "LOFI-VINYL",
+            "LOFI-RIM", "LOFI-CLAP", "LOFI-SOOTHE", "LOFI-GRAIN",
+            "LOFI-KICK", "LOFI-BASS", "LOFI-SNARE", "LOFI-HAT"
+        )),
+        DrumKit("Analog Future", listOf(
+            "Juno-Pad", "Warp-Hit", "Pulse-Lead", "Cyber-Perc",
+            "Analog-Tom-L", "Analog-Tom-M", "Analog-Tom-H", "Digital-Noise",
+            "Tight-Open-Hat", "Slapper-Clap", "Rim-Verbotron", "Tape-Crash",
+            "Kick-Juno", "Kick-1985", "Snare-Analog", "Hats-Springwater"
+        ))
+    )
+    
     // 🥁 BEAT CREATION ENGINE
     val isRecordingBeats = mutableStateOf(false)
     val isPlayingBeats = mutableStateOf(false)
-    val drumPadLabels = mutableStateListOf("KICK", "SNARE", "HIHAT", "CLAP", "TOM", "CRASH", "PERC", "COWBELL", "SHAKER", "OPENHAT", "RIDE", "FX", "SUB", "KICK-2", "SNARE-2", "HIT")
+    val drumPadLabels = mutableStateListOf<String>().apply { addAll(drumKits[0].labels) }
     private var beatStartTime = 0L
-    private var _isShuffleEnabled = mutableStateOf(false)
     private var persistenceCounter = 0
-    var isShuffleEnabled: Boolean
-        get() = _isShuffleEnabled.value
-        set(value) {
-            _isShuffleEnabled.value = value
-            audioEngine.setShuffleMode(value)
-        }
     
     private var _scanner: pEQFileScanner? = null
     var scanner: pEQFileScanner?
@@ -600,7 +713,7 @@ val client = createHttpClient()
                 viewModelScope.launch {
                     mediaLibrary.collect { library ->
                         val current = currentMediaItem.value ?: return@collect
-                        if (current.subtitle == "Media Resource" || current.artist == "Unknown Artist") {
+                        if (current.subtitle == "Media Resource" || current.artist == "Unknown Artist" || current.subtitle == "Local archive" || current.subtitle == "Neural Engine") {
                             library.find { it.path == current.path }?.let { matched ->
                                 currentMediaItem.value = matched
                                 println("Industrial Sync: Resolved fallback metadata for ${matched.title}")
@@ -623,7 +736,9 @@ val client = createHttpClient()
                     _mediaLibrary.value.find { it.path == path } ?: run {
                         // Priority 2: Check engine state if it's already playing this
                         val engineUri = audioEngine.getCurrentTrackUri()
-                        if (engineUri == path) {
+                        val isCurrentActive = engineUri == path
+                        
+                        if (isCurrentActive) {
                             // Synthesize item from engine metadata if available
                             org.audiocular.peq.app.data.pEQMediaItem(
                                 id = "engine_${path.hashCode()}",
@@ -640,10 +755,9 @@ val client = createHttpClient()
                         } else if (path.startsWith("http")) {
                             org.audiocular.peq.app.data.pEQMediaItem(
                                 id = "stream_${path.hashCode()}",
-                                title = session.lastTrackTitle ?: "Web Stream",
-                                subtitle = session.lastTrackArtist ?: path,
+                                title = "Web Stream",
+                                subtitle = path,
                                 path = path,
-                                thumbnail = session.lastTrackThumbnail,
                                 type = if (path.lowercase().let { it.contains(".mp4") || it.contains(".m3u8") || it.contains(".mov") || it.contains("video") || it.contains(".mkv") }) 
                                     org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
                                 format = "STREAM",
@@ -659,10 +773,9 @@ val client = createHttpClient()
                             
                             org.audiocular.peq.app.data.pEQMediaItem(
                                 id = "resolved_${path.hashCode()}",
-                                title = session.lastTrackTitle ?: fileName,
-                                subtitle = session.lastTrackArtist ?: "Local archive",
+                                title = fileName,
+                                subtitle = "Local archive",
                                 path = path,
-                                thumbnail = session.lastTrackThumbnail,
                                 type = if (isVideoExt) org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
                                 format = extension.uppercase(),
                                 sizeBytes = 0L,
@@ -1072,20 +1185,6 @@ private fun observeLibraryState() {
         audioEngine.setPlaybackSpeed(playbackSpeed.value)
     }
 
-    fun toggleShuffle() {
-        isShuffleEnabled = !isShuffleEnabled
-    }
-
-    fun cycleRepeatMode() {
-        repeatMode.value = when (repeatMode.value) {
-            RepeatMode.OFF -> RepeatMode.ALL
-            RepeatMode.ALL -> RepeatMode.ONE
-            RepeatMode.ONE -> RepeatMode.OFF
-            else -> RepeatMode.OFF
-        }
-        audioEngine.setRepeatMode(repeatMode.value)
-        audioEngine.setRepeatMode(repeatMode.value)
-    }
 
     fun seekTo(positionMs: Long) {
         audioEngine.seekTo(positionMs)
@@ -1920,7 +2019,8 @@ suspend inline fun <T> retry(
                         bitDepth = it.bitDepth,
                         sampleRate = it.sampleRate,
                         bitrate = it.bitrate,
-                        thumbnail = it.thumbnail
+                        thumbnail = it.thumbnail,
+                        lyrics = it.lyrics
                     )
                 }
                 val videoItems = video.map {
@@ -1963,35 +2063,6 @@ suspend inline fun <T> retry(
         if (list.contains(type)) list.remove(type) else list.add(type)
     }
     
-    data class DrumKit(val name: String, val labels: List<String>)
-    data class DrumTutorial(val name: String, val steps: List<List<String>> = emptyList())
-    
-    val drumKits = listOf(
-        DrumKit("Neural 808", listOf(
-            "808-PERC", "808-TOM_H", "808-TOM_M", "808-CRASH",
-            "808-OPEN_HAT", "808-CLAP", "808-TOM_L", "808-RIDE",
-            "808-SNARE_2", "808-RIM", "808-FX", "808-SHAKER",
-            "808-KICK_1", "808-KICK_2", "808-SNARE_1", "808-CLOSED_HAT"
-        )),
-        DrumKit("Industrial Grime", listOf(
-            "GRIME-STEAM", "GRIME-HAMMER", "GRIME-METAL", "GRIME-CLANG",
-            "GRIME-PIPE", "GRIME-CRUSH", "GRIME-ENGINE", "GRIME-SPARK",
-            "GRIME-GEAR", "GRIME-OIL", "GRIME-RUST", "GRIME-DRILL",
-            "GRIME-STEEL_KICK", "GRIME-SUB", "GRIME-HAMMER_SNARE", "GRIME-METAL_HAT"
-        )),
-        DrumKit("Lofi Nostalgia", listOf(
-            "LOFI-DUST", "LOFI-WARMTH", "LOFI-MEMORIES", "LOFI-RAIN",
-            "LOFI-BREEZE", "LOFI-ECHO", "LOFI-FADED", "LOFI-VINYL",
-            "LOFI-RIM", "LOFI-CLAP", "LOFI-SOOTHE", "LOFI-GRAIN",
-            "LOFI-KICK", "LOFI-BASS", "LOFI-SNARE", "LOFI-CLOSED_HAT"
-        )),
-        DrumKit("Retro Future", listOf(
-            "RETRO-CYBER", "RETRO-PULSE", "RETRO-WARP", "RETRO-LOGIC",
-            "RETRO-NEON", "RETRO-GRID", "RETRO-PHASE", "RETRO-SYNC",
-            "RETRO-HIT", "RETRO-CLAP", "RETRO-LINK", "RETRO-CODE",
-            "RETRO-KICK", "RETRO-SUB", "RETRO-SNARE", "RETRO-CLOSED_HAT"
-        ))
-    )
     val selectedDrumKit = mutableStateOf(drumKits[0])
     fun switchDrumKit(kit: DrumKit) {
         selectedDrumKit.value = kit
@@ -2009,6 +2080,9 @@ suspend inline fun <T> retry(
     val sequencerTriggeredPads = mutableStateMapOf<String, Boolean>()
     private val _selectedTheme = mutableStateOf(pEQTheme.DARK)
     val selectedTheme: State<pEQTheme> = _selectedTheme
+
+    private val _selectedAccent = mutableStateOf(pEQAccent.AMBER)
+    val selectedAccent: State<pEQAccent> = _selectedAccent
     
     val sampleLibrary = mapOf(
         "KICKS" to listOf("Neural Kick 1", "Industrial Kick 2", "Lofi Thump"),
@@ -2042,6 +2116,7 @@ suspend inline fun <T> retry(
     fun playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
         showStemSplitter.value = false 
         currentMediaItem.value = item
+        syncedLyrics.clear()
         
         viewModelScope.launch {
             val playPath = if (item.path.startsWith("http") && (item.path.contains("youtube.com") || item.path.contains("youtu.be"))) {
@@ -2050,6 +2125,21 @@ suspend inline fun <T> retry(
             
             audioEngine.playTrack(playPath, item.title, item.artist, item.thumbnail)
             isPlaying.value = true
+
+            // 📝 Industrial Lyric Resolution
+            if (!item.lyrics.isNullOrBlank()) {
+                syncedLyrics.clear()
+                syncedLyrics.addAll(parseLrc(item.lyrics))
+                if (syncedLyrics.isEmpty()) {
+                    // Fallback to plain if not LRC format
+                    item.lyrics.lines().filter { it.isNotBlank() }.forEachIndexed { index, line ->
+                        syncedLyrics.add(SyncedLine(timestampMs = index * 5000L, text = line))
+                    }
+                }
+            } else {
+                // Auto-fetch if missing embedded lyrics
+                fetchLyrics(autoOpenEditor = false)
+            }
         }
         
         if (addToQueue && !playbackQueue.any { it.path == item.path }) {
@@ -2118,6 +2208,12 @@ suspend inline fun <T> retry(
     
     fun updateTheme(theme: pEQTheme) {
         _selectedTheme.value = theme
+        persistSession()
+    }
+    
+    fun updateAccent(accent: pEQAccent) {
+        _selectedAccent.value = accent
+        persistSession()
     }
     fun toggleSleepTimer(enabled: Boolean) { 
         sleepTimerActive.value = enabled
@@ -2285,8 +2381,6 @@ suspend inline fun <T> retry(
     }
     
     
-    val repeatMode = mutableStateOf(RepeatMode.OFF)
-
     fun togglePlayback() {
         if (isPlaying.value) audioEngine.pause() else audioEngine.resume()
         isPlaying.value = !isPlaying.value

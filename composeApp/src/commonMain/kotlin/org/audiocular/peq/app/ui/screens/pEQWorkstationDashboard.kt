@@ -1598,9 +1598,7 @@ fun UnifiedMediaExplorerTab(
                                     }
 
                                     .groupBy {
-
-                                        it.artist
-                                            ?: "Unknown Artist"
+                                        it.artist ?: "Unknown Artist"
                                     }
 
                             } else {
@@ -1744,7 +1742,7 @@ fun UnifiedMediaExplorerTab(
 
                         items(
                             filteredItems,
-                            key = { it.path }
+                            key = { it.path + it.id }
                         ) { item ->
 
                             MediaItemCard(
@@ -2055,7 +2053,7 @@ fun FavoritesTab(
 
                 items(
                     items = filtered,
-                    key = { it.path }
+                    key = { it.path + it.id }
                 ) { item ->
 
                     MediaItemCard(
@@ -2283,7 +2281,7 @@ fun PlaylistManagerTab(
 
                     itemsIndexed(
                         items = playlistItems,
-                        key = { _, item -> item.path }
+                        key = { _, item -> item.path + item.id }
                     ) { index, item ->
 
                         var accumulatedDrag by remember {
@@ -2890,6 +2888,7 @@ fun SystemStatusTab(
                 desc =
                     "Refresh library on startup",
 
+
                 enabled = viewModel.isAutoScanEnabled.value, onToggle = { viewModel.isAutoScanEnabled.value = it }
             )
         }
@@ -3385,6 +3384,8 @@ private fun CompactMediaCard(
 
                         shape = CircleShape,
 
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)),
+
                         color = Color.Black.copy(alpha = 0.48f)
                     ) {
 
@@ -3397,7 +3398,7 @@ private fun CompactMediaCard(
 
                                 contentDescription = null,
 
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.onSurface,
 
                                 modifier = Modifier.size(18.dp)
                             )
@@ -3426,7 +3427,7 @@ private fun CompactMediaCard(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                                 fontSize = 6.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -3740,7 +3741,7 @@ private fun pEQThemePaletteCard(
                             .background(color)
                             .border(
                                 1.dp,
-                                Color.White.copy(
+                                MaterialTheme.colorScheme.onSurface.copy(
                                     alpha = 0.12f
                                 ),
                                 CircleShape
@@ -4000,7 +4001,7 @@ fun ArchiveCommandCard(viewModel: AppViewModel) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(viewModel.scanFolders) { folder ->
                         AssistChip(
-                            onClick = { viewModel.openFolder(folder); viewModel.dashboardSubTab.value = 2 },
+                            onClick = { viewModel.openFolder(folder); viewModel.dashboardSubTab.value = 1 },
                             label = { Text(folder.substringAfterLast("/"), fontSize = 10.sp) },
                             leadingIcon = { Icon(Icons.Default.Folder, null, modifier = Modifier.size(14.dp)) }
                         )

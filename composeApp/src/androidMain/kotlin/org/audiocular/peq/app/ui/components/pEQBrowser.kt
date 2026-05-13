@@ -17,10 +17,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun pEQBrowser(
+actual fun pEQBrowser(
     url: String,
     onClose: () -> Unit,
-    onStreamCaptured: (String) -> Unit = {}
+    onStreamCaptured: (String) -> Unit
 ) {
     var currentUrl by remember { mutableStateOf(url) }
     var canGoBack by remember { mutableStateOf(false) }

@@ -8,9 +8,12 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
+import androidx.glance.appwidget.updateAll
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -19,16 +22,22 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import kotlinx.coroutines.*
+import androidx.palette.graphics.Palette
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.audiocular.peq.app.MainActivity
 import org.audiocular.peq.app.R
-import org.audiocular.peq.app.receivers.pEQWidgetProvider
 import org.audiocular.peq.app.widgets.NeuralGlanceWidget
-import androidx.glance.appwidget.updateAll
-import androidx.palette.graphics.Palette
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
+import java.io.File
+import java.io.FileOutputStream
 
 class pEQMediaSessionService : MediaSessionService() {
 
@@ -38,11 +47,28 @@ class pEQMediaSessionService : MediaSessionService() {
             "peq_media_session_channel"
 
         private const val NOTIFICATION_ID = 1001
+
+        const val ACTION_PLAY_PAUSE = "org.audiocular.peq.app.ACTION_PLAY_PAUSE"
+        const val ACTION_NEXT = "org.audiocular.peq.app.ACTION_NEXT"
+        const val ACTION_PREV = "org.audiocular.peq.app.ACTION_PREV"
+        const val ACTION_REPLAY_10 = "org.audiocular.peq.app.ACTION_REPLAY_10"
+        const val ACTION_FORWARD_30 = "org.audiocular.peq.app.ACTION_FORWARD_30"
+        const val ACTION_SHUFFLE = "org.audiocular.peq.app.ACTION_SHUFFLE"
+        const val ACTION_FAVORITE = "org.audiocular.peq.app.ACTION_FAVORITE"
+        const val ACTION_REPEAT = "org.audiocular.peq.app.ACTION_REPEAT"
     }
 
-    // =========================================================
-    // SCOPE
-    // =========================================================
+    /*
+     * json
+     */
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
+    /*
+     * scope
+     */
 
     private val serviceScope =
         CoroutineScope(
@@ -51,17 +77,17 @@ class pEQMediaSessionService : MediaSessionService() {
 
     private var widgetProgressJob: Job? = null
 
-    // =========================================================
-    // PLAYER / SESSION
-    // =========================================================
+    /*
+     * player/session
+     */
 
     private lateinit var player: ExoPlayer
 
     private var mediaSession: MediaSession? = null
 
-    // =========================================================
-    // CREATE
-    // =========================================================
+    /*
+     * create
+     */
 
     override fun onCreate() {
 
@@ -141,9 +167,9 @@ class pEQMediaSessionService : MediaSessionService() {
         )
     }
 
-    // =========================================================
-    // SESSION
-    // =========================================================
+    /*
+     * session
+     */
 
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
@@ -152,30 +178,73 @@ class pEQMediaSessionService : MediaSessionService() {
         return mediaSession
     }
 
-    // =========================================================
-    // FOREGROUND
-    // =========================================================
+    /*
+     * commands
+     */
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
+
         when (intent?.action) {
-            pEQWidgetProvider.ACTION_PLAY_PAUSE -> {
-                if (player.isPlaying) player.pause() else player.play()
+
+            ACTION_PLAY_PAUSE -> {
+                if (player.isPlaying) {
+                    player.pause()
+                } else {
+                    player.play()
+                }
             }
-            pEQWidgetProvider.ACTION_NEXT -> {
+
+            ACTION_NEXT -> {
                 player.seekToNext()
             }
-            pEQWidgetProvider.ACTION_PREV -> {
+
+            ACTION_PREV -> {
                 player.seekToPrevious()
             }
-            pEQWidgetProvider.ACTION_FAVORITE -> {
+
+            ACTION_REPLAY_10 -> {
+                player.seekTo(maxOf(0L, player.currentPosition - 10000L))
+            }
+
+            ACTION_FORWARD_30 -> {
+                player.seekTo(minOf(player.duration, player.currentPosition + 30000L))
+            }
+
+            ACTION_SHUFFLE -> {
+                player.shuffleModeEnabled = !player.shuffleModeEnabled
+                updateWidgetMetadata()
+            }
+
+            ACTION_FAVORITE -> {
                 val prefs = getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
                 val isFav = prefs.getBoolean("is_favorite", false)
                 prefs.edit().putBoolean("is_favorite", !isFav).apply()
+                updateWidgetMetadata()
+            }
+
+            ACTION_REPEAT -> {
+                val next = (player.repeatMode + 1) % 4 // OFF, ALL, ONE, FOLDER
+                player.repeatMode = next
+                updateWidgetMetadata()
             }
         }
+
         refreshWidgets()
-        return super.onStartCommand(intent, flags, startId)
+
+        return super.onStartCommand(
+            intent,
+            flags,
+            startId
+        )
     }
+
+    /*
+     * notification
+     */
 
     private fun updateNotification() {
 
@@ -184,43 +253,140 @@ class pEQMediaSessionService : MediaSessionService() {
                 Context.NOTIFICATION_SERVICE
             ) as NotificationManager
 
-        manager.notify(
-            NOTIFICATION_ID,
-            createNotification()
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, createNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification())
+        }
     }
 
     @OptIn(UnstableApi::class)
     private fun createNotification(): Notification {
-        val launchIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
 
-        val contentIntent = PendingIntent.getActivity(
-            this, 0, launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val launchIntent =
+            Intent(
+                this,
+                MainActivity::class.java
+            ).apply {
+
+                flags =
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+
+        val contentIntent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+
+        val prevIntent =
+            Intent(
+                this,
+                pEQMediaSessionService::class.java
+            ).apply {
+
+                action =
+            ACTION_PREV
+            }
+
+        val prevPending =
+            PendingIntent.getService(
+                this,
+                10,
+                prevIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+
+        val playIntent =
+            Intent(
+                this,
+                pEQMediaSessionService::class.java
+            ).apply {
+
+                action =
+                    ACTION_PLAY_PAUSE
+            }
+
+        val playPending =
+            PendingIntent.getService(
+                this,
+                11,
+                playIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+
+        val nextIntent =
+            Intent(
+                this,
+                pEQMediaSessionService::class.java
+            ).apply {
+
+                action =
+                    ACTION_NEXT
+            }
+
+        val nextPending =
+            PendingIntent.getService(
+                this,
+                12,
+                nextIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+
+        return NotificationCompat.Builder(
+            this,
+            CHANNEL_ID
         )
-
-        val prevIntent = Intent(this, pEQMediaSessionService::class.java).apply { action = pEQWidgetProvider.ACTION_PREV }
-        val prevPending = PendingIntent.getService(this, 10, prevIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val playIntent = Intent(this, pEQMediaSessionService::class.java).apply { action = pEQWidgetProvider.ACTION_PLAY_PAUSE }
-        val playPending = PendingIntent.getService(this, 11, playIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val nextIntent = Intent(this, pEQMediaSessionService::class.java).apply { action = pEQWidgetProvider.ACTION_NEXT }
-        val nextPending = PendingIntent.getService(this, 12, nextIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_music)
-            .setContentTitle(player.currentMediaItem?.mediaMetadata?.title ?: "pEQ Neural")
-            .setContentText(player.currentMediaItem?.mediaMetadata?.artist ?: "Neural Workstation")
-            .setContentIntent(contentIntent)
+            .setSmallIcon(
+                R.drawable.ic_music
+            )
+            .setContentTitle(
+                player.currentMediaItem
+                    ?.mediaMetadata
+                    ?.title
+                    ?: "pEQ Neural"
+            )
+            .setContentText(
+                player.currentMediaItem
+                    ?.mediaMetadata
+                    ?.artist
+                    ?: "Neural Workstation"
+            )
+            .setContentIntent(
+                contentIntent
+            )
             .setOnlyAlertOnce(true)
             .setOngoing(player.isPlaying)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(NotificationCompat.Action(R.drawable.ic_prev, "Previous", prevPending))
+            .setCategory(
+                NotificationCompat.CATEGORY_TRANSPORT
+            )
+            .setPriority(
+                NotificationCompat.PRIORITY_LOW
+            )
+            .setVisibility(
+                NotificationCompat.VISIBILITY_PUBLIC
+            )
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_replay_10,
+                    "Replay 10s",
+                    PendingIntent.getService(this, 13, Intent(this, pEQMediaSessionService::class.java).apply { action = ACTION_REPLAY_10 }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_prev,
+                    "Previous",
+                    prevPending
+                )
+            )
             .addAction(
                 NotificationCompat.Action(
                     if (player.isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
@@ -228,22 +394,51 @@ class pEQMediaSessionService : MediaSessionService() {
                     playPending
                 )
             )
-            .addAction(NotificationCompat.Action(R.drawable.ic_next, "Next", nextPending))
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_next,
+                    "Next",
+                    nextPending
+                )
+            )
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_forward_30,
+                    "Forward 30s",
+                    PendingIntent.getService(this, 14, Intent(this, pEQMediaSessionService::class.java).apply { action = ACTION_FORWARD_30 }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_shuffle,
+                    "Shuffle",
+                    PendingIntent.getService(this, 15, Intent(this, pEQMediaSessionService::class.java).apply { action = ACTION_SHUFFLE }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+            .addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_favorite,
+                    "Favorite",
+                    PendingIntent.getService(this, 16, Intent(this, pEQMediaSessionService::class.java).apply { action = ACTION_FAVORITE }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
             .setStyle(
                 androidx.media3.session.MediaStyleNotificationHelper.MediaStyle(mediaSession!!)
-                    .setShowActionsInCompactView(0, 1, 2)
+                    .setShowActionsInCompactView(1, 2, 3)
             )
-
-        return builder.build()
+            .build()
     }
 
-    // =========================================================
-    // CHANNEL
-    // =========================================================
+    /*
+     * channel
+     */
 
     private fun createNotificationChannel() {
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.O
+        ) {
 
             val channel =
                 NotificationChannel(
@@ -263,9 +458,9 @@ class pEQMediaSessionService : MediaSessionService() {
         }
     }
 
-    // =========================================================
-    // LIVE WIDGET UPDATER
-    // =========================================================
+    /*
+     * progress updater
+     */
 
     private fun startWidgetProgressUpdater() {
 
@@ -292,9 +487,9 @@ class pEQMediaSessionService : MediaSessionService() {
         widgetProgressJob = null
     }
 
-    // =========================================================
-    // UPDATE METADATA
-    // =========================================================
+    /*
+     * metadata
+     */
 
     private fun updateWidgetMetadata() {
 
@@ -320,50 +515,158 @@ class pEQMediaSessionService : MediaSessionService() {
                 }
                 ?: "Playback Ready"
 
-        val artworkData = metadata?.artworkData
-        val artworkUri = metadata?.artworkUri
-        
-        var color1 = 0xFF121212.toInt() // Default Dark
-        var color2 = 0xFF1A1A1A.toInt() // Default Slightly Lighter
+        val artworkData =
+            metadata?.artworkData
 
-        val bitmap = artworkData?.let {
-            BitmapFactory.decodeByteArray(it, 0, it.size)
-        } ?: artworkUri?.let { uri ->
-            try {
-                if (uri.scheme == "content" || uri.scheme == "file") {
-                    val stream = contentResolver.openInputStream(uri)
-                    val b = BitmapFactory.decodeStream(stream)
-                    stream?.close()
-                    b
-                } else null
-            } catch (e: Exception) { null }
+        val artworkUri =
+            metadata?.artworkUri
+
+        var color1 =
+            0xFF121212.toInt()
+
+        var color2 =
+            0xFF1A1A1A.toInt()
+
+        val bitmap =
+            artworkData?.let {
+
+                BitmapFactory.decodeByteArray(
+                    it,
+                    0,
+                    it.size
+                )
+
+            } ?: artworkUri?.let { uri ->
+
+                try {
+
+                    if (
+                        uri.scheme == "content" ||
+                        uri.scheme == "file"
+                    ) {
+
+                        contentResolver
+                            .openInputStream(uri)
+                            ?.use { stream ->
+
+                                BitmapFactory.decodeStream(
+                                    stream
+                                )
+                            }
+
+                    } else {
+
+                        null
+                    }
+
+                } catch (_: Exception) {
+
+                    null
+                }
+            }
+
+        bitmap?.let { bmp ->
+
+            val palette =
+                Palette.from(bmp)
+                    .generate()
+
+            color1 =
+                palette.getDominantColor(
+                    0xFF121212.toInt()
+                )
+
+            color2 =
+                palette.getVibrantColor(
+                    palette.getMutedColor(
+                        color1
+                    )
+                )
+
+            /*
+             * save artwork
+             */
+
+            serviceScope.launch(
+                Dispatchers.IO
+            ) {
+
+                try {
+
+                    val file =
+                        File(
+                            filesDir,
+                            "widget_art.png"
+                        )
+
+                    FileOutputStream(file).use { out ->
+
+                        bmp.compress(
+                            Bitmap.CompressFormat.PNG,
+                            90,
+                            out
+                        )
+                    }
+
+                } catch (e: Exception) {
+
+                    println(
+                        "pEQControl: Widget Art Sync Failed: ${e.message}"
+                    )
+                }
+            }
         }
 
-        bitmap?.let {
-            val palette = Palette.from(it).generate()
-            color1 = palette.getDominantColor(0xFF121212.toInt())
-            color2 = palette.getVibrantColor(palette.getMutedColor(color1))
-            
-            // Apply slight darkening for readability if needed
-            // (Optional: can add logic here)
+        /*
+         * queue serialization
+         */
+
+        val queueList =
+            mutableListOf<String>()
+
+        for (i in 1..3) {
+
+            val nextIndex =
+                player.currentMediaItemIndex + i
+
+            if (
+                nextIndex < player.mediaItemCount
+            ) {
+
+                val nextItem =
+                    player.getMediaItemAt(nextIndex)
+
+                queueList.add(
+                    nextItem.mediaMetadata.title
+                        ?.toString()
+                        ?: "Unknown"
+                )
+            }
         }
+
+        val queueJson =
+            json.encodeToString(queueList)
 
         getSharedPreferences(
             "peq_widget_prefs",
             MODE_PRIVATE
-        ).edit()
+        )
+            .edit()
             .putString("last_track", title)
             .putString("last_artist", artist)
             .putInt("bg_color_1", color1)
             .putInt("bg_color_2", color2)
+            .putBoolean("shuffle_enabled", player.shuffleModeEnabled)
+            .putInt("repeat_mode", player.repeatMode)
+            .putString("queue_json", queueJson)
             .apply()
 
         refreshWidgets()
     }
 
-    // =========================================================
-    // UPDATE PROGRESS
-    // =========================================================
+    /*
+     * progress
+     */
 
     private fun updateWidgetProgress() {
 
@@ -383,9 +686,9 @@ class pEQMediaSessionService : MediaSessionService() {
             if (durationMs > 0) {
 
                 (
-                        (currentMs * 100L) /
-                                durationMs
-                        ).toInt()
+                    (currentMs * 100L) /
+                            durationMs
+                    ).toInt()
 
             } else {
 
@@ -395,7 +698,8 @@ class pEQMediaSessionService : MediaSessionService() {
         getSharedPreferences(
             "peq_widget_prefs",
             MODE_PRIVATE
-        ).edit()
+        )
+            .edit()
             .putInt(
                 "progress",
                 progress
@@ -417,9 +721,9 @@ class pEQMediaSessionService : MediaSessionService() {
         refreshWidgets()
     }
 
-    // =========================================================
-    // PLAYBACK STATE
-    // =========================================================
+    /*
+     * playback state
+     */
 
     private fun updateWidgetPlaybackState(
         isPlaying: Boolean
@@ -428,7 +732,8 @@ class pEQMediaSessionService : MediaSessionService() {
         getSharedPreferences(
             "peq_widget_prefs",
             MODE_PRIVATE
-        ).edit()
+        )
+            .edit()
             .putBoolean(
                 "is_playing",
                 isPlaying
@@ -438,36 +743,26 @@ class pEQMediaSessionService : MediaSessionService() {
         refreshWidgets()
     }
 
-    // =========================================================
-    // REFRESH WIDGETS
-    // =========================================================
+    /*
+     * widgets
+     */
 
     private fun refreshWidgets() {
-        // 🚀 Legacy XML Widgets Refresh
-        val manager = AppWidgetManager.getInstance(this)
-        val componentName = ComponentName(this, pEQWidgetProvider::class.java)
-        val ids = manager.getAppWidgetIds(componentName)
-        
-        if (ids.isNotEmpty()) {
-            val provider = pEQWidgetProvider()
-            ids.forEach { id ->
-                provider.updateAppWidget(this, manager, id)
-            }
-        }
-
-        // 🚀 Modern Glance Widgets Refresh
         serviceScope.launch {
             try {
-                NeuralGlanceWidget().updateAll(applicationContext)
+                NeuralGlanceWidget()
+                    .updateAll(
+                        applicationContext
+                    )
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    // =========================================================
-    // FORMAT
-    // =========================================================
+    /*
+     * formatter
+     */
 
     private fun formatTime(
         ms: Long
@@ -493,17 +788,20 @@ class pEQMediaSessionService : MediaSessionService() {
         )
     }
 
-    // =========================================================
-    // PLAYER
-    // =========================================================
+    /*
+     * player
+     */
 
     private fun createPlayer(): ExoPlayer {
-        return org.audiocular.peq.app.audio.AudioEngineProvider.getExoPlayer(this)
+
+        return org.audiocular.peq.app.audio
+            .AudioEngineProvider
+            .getExoPlayer(this)
     }
 
-    // =========================================================
-    // DESTROY
-    // =========================================================
+    /*
+     * destroy
+     */
 
     override fun onDestroy() {
 
@@ -513,7 +811,6 @@ class pEQMediaSessionService : MediaSessionService() {
 
         mediaSession = null
 
-        // player.release() // Managed by Provider
         serviceScope.cancel()
 
         stopForeground(

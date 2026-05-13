@@ -89,8 +89,9 @@ class AndroidAudioEngine(
             Context.MODE_PRIVATE
         )
 
-    private val soundPool = android.media.SoundPool.Builder().setMaxStreams(16).build()
-    private val drumSounds = mutableMapOf<String, Int>()
+    private val soundPool = android.media.SoundPool.Builder().setMaxStreams(32).build()
+    private val kitSounds = mutableMapOf<String, MutableMap<String, Int>>()
+    private var currentDrumKitName = "NEURAL"
 
 
 
@@ -1323,30 +1324,42 @@ class AndroidAudioEngine(
         engineScope.launch(Dispatchers.IO) {
             try {
                 val assetManager = context.assets
-                // Standardizing on 'drums' directory for organized kits
-                val kitFolders = assetManager.list("drums") ?: arrayOf("fingerdrumming")
+                val files = assetManager.list("samples/drum") ?: emptyArray()
                 
-                kitFolders.forEach { folder ->
-                    val files = assetManager.list(if (folder == "fingerdrumming") folder else "drums/$folder") ?: emptyArray()
-                    files.forEach { fileName ->
-                        if (fileName.endsWith(".wav", ignoreCase = true)) {
-                            try {
-                                val path = if (folder == "fingerdrumming") "fingerdrumming/$fileName" else "drums/$folder/$fileName"
-                                val afd = assetManager.openFd(path)
-                                val rawName = fileName.substringBeforeLast(".").uppercase()
-                                
-                                // Unique label including kit prefix (e.g., 808-KICK)
-                                val prefix = if (folder == "fingerdrumming") "" else "${folder.uppercase()}-"
-                                val label = if (rawName.startsWith(prefix)) rawName else "$prefix$rawName"
-                                
-                                drumSounds[label] = soundPool.load(afd, 1)
-                            } catch (e: Exception) {
-                                println("pEQControl: [SAMPLES] Failed to load $fileName: ${e.message}")
+                files.forEach { fileName ->
+                    if (fileName.endsWith(".wav", ignoreCase = true)) {
+                        try {
+                            val path = "samples/drum/$fileName"
+                            val afd = assetManager.openFd(path)
+                            val rawName = fileName.substringBeforeLast(".").uppercase()
+                            val label = rawName.replace(" ", "-").replace("_", "-")
+                            
+                            // Determine Kit from prefix or fallback to 'NEURAL'
+                            val kitKey = when {
+                                label.startsWith("808") -> "NEURAL"
+                                label.startsWith("GRIME") -> "INDUSTRIAL"
+                                label.startsWith("LOFI") -> "LOFI"
+                                label.startsWith("RETRO") -> "RETRO"
+                                else -> "NEURAL"
                             }
+                            
+                            val kitMap = kitSounds.getOrPut(kitKey) { mutableMapOf() }
+                            val soundId = soundPool.load(afd, 1)
+                            kitMap[label] = soundId
+                            
+                            // Map generic triggers for this kit
+                            val genericLabels = listOf("KICK", "SNARE", "HIHAT", "HATS", "CLAP", "PERC", "TOM")
+                            genericLabels.forEach { generic ->
+                                if (label.contains(generic) && !kitMap.containsKey(generic)) {
+                                    kitMap[generic] = soundId
+                                }
+                            }
+                        } catch (e: Exception) {
+                            println("pEQControl: [SAMPLES] Failed to load $fileName: ${e.message}")
                         }
                     }
                 }
-                println("pEQControl: [SAMPLES] Synchronized ${drumSounds.size} neural triggers from kits")
+                println("pEQControl: [SAMPLES] Synchronized ${kitSounds.size} kits with ${kitSounds.values.sumOf { it.size }} triggers")
             } catch (e: Exception) {
                 println("pEQControl: [SAMPLES] Asset scan failed: ${e.message}")
             }
@@ -1354,27 +1367,32 @@ class AndroidAudioEngine(
     }
 
     override fun playDrumSample(label: String, index: Int) {
+        val kitKey = when {
+            label.contains("808") -> "NEURAL"
+            label.contains("GRIME") -> "INDUSTRIAL"
+            label.contains("LOFI") -> "LOFI"
+            label.contains("RETRO") || label.contains("JUNO") || label.contains("WARP") -> "RETRO"
+            else -> currentDrumKitName
+        }
+        
+        val kitMap = kitSounds[kitKey] ?: kitSounds["NEURAL"] ?: return
         val target = label.uppercase()
         
-        // 🚀 Industrial Mapping: Try exact match first, then prefixed match
-        val soundId = drumSounds[target] 
-            ?: drumSounds.keys.find { it == target || it.endsWith("-$target") }?.let { drumSounds[it] }
+        var soundId = kitMap[target] 
+            ?: kitMap.entries.find { it.key.startsWith("$target-") || it.key.contains(target) }?.value
         
+        if (soundId == null && index >= 0) {
+            val generic = listOf("KICK", "SNARE", "HAT", "TOM", "CLAP", "PERC").find { target.contains(it) }
+            soundId = if (generic != null) kitMap[generic] else kitMap.values.elementAtOrNull(index % kitMap.size)
+        }
+
         if (soundId != null) {
             val velocity = 0.85f + (Math.random().toFloat() * 0.15f)
             soundPool.play(soundId, velocity, velocity, 1, 0, 1f)
-        } else {
-            // Fallback: Use index to pick from all loaded sounds if no label match
-            val sounds = drumSounds.values.toList()
-            if (sounds.isNotEmpty()) {
-                val fallbackId = sounds[index % sounds.size]
-                val velocity = 0.7f + (Math.random().toFloat() * 0.1f)
-                soundPool.play(fallbackId, velocity, velocity, 1, 0, 1f)
-            }
         }
     }
 
-    override fun getLoadedSampleLabels(): List<String> = drumSounds.keys.toList()
+    override fun getLoadedSampleLabels(): List<String> = (kitSounds[currentDrumKitName] ?: mutableMapOf()).keys.toList()
 
     @OptIn(UnstableApi::class)
     override fun setVideoScalingMode(mode: Int) {
@@ -1382,7 +1400,9 @@ class AndroidAudioEngine(
     }
 
     override fun setAudioDelay(ms: Long) {
+        // Industrial Latency Correction
     }
+
 
     override fun seekRelative(deltaMs: Long) {
 

@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // =====================================================
 // GLASS SYSTEM
@@ -241,18 +242,28 @@ private val ProLightColorScheme = lightColorScheme(
 )
 
 // =====================================================
+// ACCENTS
+// =====================================================
+
+enum class pEQAccent(val color: Color, val label: String) {
+    AMBER(StudioAmber, "Industrial Amber"),
+    BLUE(StudioBlue, "Neural Blue"),
+    CYAN(MutedCyan, "Aero Cyan"),
+    EMERALD(Emerald, "Bio Emerald"),
+    RED(NeonRed, "Critical Red"),
+    MAGENTA(Color(0xFFFF00FF), "Cyber Magenta"),
+    VIOLET(Color(0xFF8B5CF6), "Royal Violet")
+}
+
+// =====================================================
 // THEME ENUM
 // =====================================================
 
 enum class pEQTheme {
-
-        DARK,
-
-        OLED,
-
-        LIGHT,
-
-        SYSTEM
+    DARK,
+    OLED,
+    LIGHT,
+    SYSTEM
 }
 
 // =====================================================
@@ -261,46 +272,37 @@ enum class pEQTheme {
 
 @Composable
 fun pEQTheme(
-        theme: pEQTheme = pEQTheme.DARK,
-        content: @Composable () -> Unit
+    theme: pEQTheme = pEQTheme.DARK,
+    accent: pEQAccent = pEQAccent.AMBER,
+    content: @Composable () -> Unit
 ) {
+    val darkSystem = isSystemInDarkTheme()
 
-        val darkSystem =
-                isSystemInDarkTheme()
-
-        val colors =
-                when (theme) {
-
-                        pEQTheme.DARK ->
-                                ProDarkColorScheme
-
-                        pEQTheme.OLED ->
-                                OLEDColorScheme
-
-                        pEQTheme.LIGHT ->
-                                ProLightColorScheme
-
-                        pEQTheme.SYSTEM -> {
-
-                                if (darkSystem)
-                                        ProDarkColorScheme
-                                else
-                                        ProLightColorScheme
-                        }
-                }
-
-        MaterialTheme(
-                colorScheme = colors,
-                typography = Typography(),
-                shapes = Shapes()
-        ) {
-
-                Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = colors.background
-                ) {
-
-                        content()
-                }
+    val baseColors = when (theme) {
+        pEQTheme.DARK -> ProDarkColorScheme
+        pEQTheme.OLED -> OLEDColorScheme
+        pEQTheme.LIGHT -> ProLightColorScheme
+        pEQTheme.SYSTEM -> {
+            if (darkSystem) ProDarkColorScheme else ProLightColorScheme
         }
+    }
+
+    // Override primary with selected accent
+    val colors = baseColors.copy(
+        primary = accent.color,
+        onPrimary = if (accent.color.luminance() > 0.5f) Color.Black else Color.White
+    )
+
+    MaterialTheme(
+        colorScheme = colors,
+        typography = Typography(),
+        shapes = Shapes()
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = colors.background
+        ) {
+            content()
+        }
+    }
 }

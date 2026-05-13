@@ -74,6 +74,7 @@ fun App() {
         LocalAppViewModel.current
 
     val theme by viewModel.selectedTheme
+    val accent by viewModel.selectedAccent
 
     val showSplash =
         !viewModel.splashCompleted
@@ -88,7 +89,7 @@ LaunchedEffect(Unit) {
     }
 }
 
-    pEQTheme(theme = theme) {
+    pEQTheme(theme = theme, accent = accent) {
 
         Box(
             modifier =
@@ -289,14 +290,17 @@ fun pEQSplashScreen() {
             Spacer(Modifier.height(18.dp))
 
            var loadingText by remember {
-    mutableStateOf("Loading audio engine")
+        mutableStateOf("Loading assets...")
 }
 
 LaunchedEffect(Unit) {
     delay(1000)
-    loadingText = "Loading video engine"
+    loadingText = "audio & video components..."
 }
-
+LaunchedEffect(Unit) {
+    delay(1000)
+    loadingText = "neural engine..."
+}
 Text(
     text = loadingText,
     color = Color.White.copy(alpha = 0.42f),
@@ -556,11 +560,13 @@ fun MainScreen(
                     .fillMaxSize()
             ) {
 
-                // ALWAYS RENDER BACKGROUND FIRST
-                DynamicBackground(
-                    baseColor = MaterialTheme.colorScheme.primary,
-                    transientImpact = 0.2f
-                )
+                // ALWAYS RENDER BACKGROUND FIRST (Optimized for Focus Modes)
+                if (!viewModel.isLockScreenMode.value || viewModel.isInPipMode.value) {
+                    DynamicBackground(
+                        baseColor = MaterialTheme.colorScheme.primary,
+                        transientImpact = 0.2f
+                    )
+                }
 
 
                 if (isVideoFullScreen) {
@@ -616,7 +622,12 @@ fun MainScreen(
                                 ) {
 
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 12.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { viewModel.currentTab.value = Tab.Player }
+                                            .padding(8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.Center
                                     ) {
@@ -646,11 +657,11 @@ fun MainScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "Workstation",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 8.sp,
+                                                text = "TAP TO OPEN PLAYER",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 7.sp,
                                                 letterSpacing = 0.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                                             )
                                         }
                                     }
@@ -762,8 +773,11 @@ fun MainScreen(
                                 }
                             }
                         }
+                    } else {
+                        SettingsPanel(viewModel)
                     }
                 }
+
                 // =========================
                 // FOLDER MANAGER
                 // =========================
@@ -2097,7 +2111,7 @@ fun DynamicBackground(
 }
     @Composable
     fun NavigationRailSection(viewModel: AppViewModel) {
-        val tabs = listOf(Tab.Player, Tab.Dashboard, Tab.Tuning, Tab.Hardware, Tab.Learn)
+        val tabs = listOf(Tab.Dashboard, Tab.Tuning, Tab.Hardware, Tab.Learn)
         tabs.forEach { tab ->
             val isSelected = viewModel.currentTab.value == tab
             Surface(
