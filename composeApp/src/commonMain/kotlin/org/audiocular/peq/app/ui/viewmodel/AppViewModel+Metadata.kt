@@ -1,10 +1,13 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.datetime.Clock
 import org.audiocular.peq.app.data.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Extension for AppViewModel to handle Metadata, Lyrics, and Subtitles logic.
@@ -51,7 +54,7 @@ fun AppViewModel.handleCapturedStream(url: String) {
 fun AppViewModel.fetchLyrics(autoOpenEditor: Boolean = true) {
     val item = currentMediaItem.value ?: return
     
-    viewModelScope.launch {
+    scope.launch {
         activeJob.value = SplitJob(
             id = "LYRICS_${Clock.System.now().toEpochMilliseconds()}",
             name = "Neural Lyrics Sync",
@@ -97,15 +100,20 @@ fun AppViewModel.fetchSubtitles(autoOpenEditor: Boolean = true) {
     val item = currentMediaItem.value ?: return
     if (item.type != MediaType.VIDEO) return
     
-    viewModelScope.launch {
-        activeJob.value = SplitJob(
-            id = "SUBS_${Clock.System.now().toEpochMilliseconds()}",
-            name = "Subtitle Retrieval",
-            progress = 0.2f,
-            status = "SEARCHING OPENSUBS"
-        )
-        
-        try {
+    if (osApiKey.value.isBlank()) {
+        showToast("OpenSubtitles API Key required in Settings")
+        return
+    }
+    
+    scope.launch {
+    activeJob.value = SplitJob(
+        id = "SUBS_${Clock.System.now().toEpochMilliseconds()}",
+        name = "Subtitle Retrieval",
+        progress = 0.2f,
+        status = "SEARCHING OPENSUBS"
+    )
+
+    try {
             val matches = subtitleRepository.searchSubtitles(
                 title = item.title,
                 artist = item.artist,
@@ -154,6 +162,98 @@ fun AppViewModel.parseLrcInternal(content: String): List<SyncedLine> {
 }
 fun AppViewModel.fetchLyricsNative() {
     fetchLyrics()
+}
+
+
+
+fun AppViewModel.importChapterFile(path: String) {
+    scope.launch {
+        try {
+            val content = readFileContent(path) ?: return@launch
+            val parsedChapters = parseChaptersInternal(content)
+            if (parsedChapters.isNotEmpty()) {
+                currentChapters.clear()
+                currentChapters.addAll(parsedChapters)
+                showToast("Imported ${parsedChapters.size} chapters")
+            } else {
+                showToast("Failed to parse chapter metadata")
+            }
+        } catch (e: Exception) {
+            showToast("Chapter import failed")
+        }
+    }
+}
+
+fun AppViewModel.importSubtitleFile(path: String) {
+    audioEngine.addExternalSubtitle(path)
+    showToast("External subtitle synchronized")
+}
+fun AppViewModel.requestChaptersPicker() {
+
+    onPickChaptersRequested?.invoke()
+
+}
+fun AppViewModel.parseChaptersInternal(content: String): List<MediaChapter> {
+    val chapters = mutableListOf<MediaChapter>()
+
+    // Regex for [00:00.00] or 00:00:00
+    val timeRegex =
+        Regex("(\\[?(\\d{1,2}:)?\\d{1,2}:\\d{1,2}[\\.|:]\\d{1,3}\\]?|\\d{1,2}:\\d{1,2})")
+
+    content.lines().forEach { line ->
+        val match = timeRegex.find(line)
+
+        if (match != null) {
+            val timeStr = match.value
+                .replace("[", "")
+                .replace("]", "")
+
+            val title = line
+                .replace(match.value, "")
+                .trim()
+                .trim('-')
+                .trim()
+
+            val ms = parseTimeToMs(timeStr)
+
+            chapters.add(
+                MediaChapter(
+                    title = if (title.isBlank()) {
+                        "Chapter ${chapters.size + 1}"
+                    } else {
+                        title
+                    },
+                    startMs = ms,
+                    endMs = Long.MAX_VALUE
+                )
+            )
+        }
+    }
+
+    val sorted = chapters.sortedBy { it.startMs }
+
+    return sorted.mapIndexed { index, chapter ->
+        val nextStart =
+            sorted.getOrNull(index + 1)?.startMs ?: Long.MAX_VALUE
+
+        chapter.copy(
+            endMs = nextStart - 1
+        )
+    }
+}
+
+private fun parseTimeToMs(time: String): Long {
+    val parts = time.split(':', '.').map { it.toLongOrNull() ?: 0L }
+    return when (parts.size) {
+        4 -> (parts[0] * 3600000) + (parts[1] * 60000) + (parts[2] * 1000) + parts[3]
+        3 -> (parts[0] * 60000) + (parts[1] * 1000) + parts[2]
+        2 -> (parts[0] * 60000) + (parts[1] * 1000)
+        else -> 0L
+    }
+}
+
+fun AppViewModel.readFileContent(path: String): String? {
+    return scanner?.readFileContent(path)
 }
 
 fun AppViewModel.enqueueSplitJob(item: pEQMediaItem) {

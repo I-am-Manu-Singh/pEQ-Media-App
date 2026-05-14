@@ -1,7 +1,11 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
+
 import kotlinx.coroutines.*
 import org.audiocular.peq.app.data.*
 
@@ -16,7 +20,7 @@ fun AppViewModel.searchAutoEqRepository(query: String) {
         return
     }
     
-    viewModelScope.launch {
+    scope.launch {
         isAutoEqLoading.value = true
         try {
             // Simulate neural lookup delay
@@ -39,7 +43,7 @@ fun AppViewModel.searchAutoEqRepository(query: String) {
 
 fun AppViewModel.applyAutoEqProfile(profile: AutoEqProfile) {
     selectedAutoEqProfile.value = profile
-    viewModelScope.launch {
+    scope.launch {
         showToast("Neural Profile: ${profile.name} Applied")
         // Simulate applying EQ curves
         for (i in 0 until 10) {
@@ -51,7 +55,7 @@ fun AppViewModel.applyAutoEqProfile(profile: AutoEqProfile) {
 }
 
 fun AppViewModel.importIr() {
-    viewModelScope.launch {
+    scope.launch {
         showToast("Ingesting Impulse Response...")
         delay(800)
         convolverIrName.value = "Custom Studio (WAV)"

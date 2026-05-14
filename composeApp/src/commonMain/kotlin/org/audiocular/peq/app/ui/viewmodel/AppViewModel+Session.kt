@@ -1,12 +1,15 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.ui.viewmodel.observeLibraryState
 import org.audiocular.peq.app.ui.viewmodel.refreshLibrary
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * SESSION ENGINE EXTENSION: pEQ NEURAL WORKSTATION
@@ -16,7 +19,7 @@ import org.audiocular.peq.app.ui.viewmodel.refreshLibrary
 fun AppViewModel.restoreSession() {
     val manager = persistenceManager
 
-    viewModelScope.launch {
+    scope.launch {
         try {
             // 1. Restore Scan Folders immediately to allow library refresh
             val storedFolders = manager.loadScanFolders()
@@ -27,7 +30,7 @@ fun AppViewModel.restoreSession() {
             refreshLibrary()
 
             // 🚀 Industrial Library Synchronization
-            viewModelScope.launch {
+            scope.launch {
                 mediaLibrary.collect { library ->
                     val current = currentMediaItem.value ?: return@collect
                     if (current.subtitle == "Media Resource" || current.artist == "Unknown Artist" || current.subtitle == "Local archive" || current.subtitle == "Neural Engine") {
@@ -52,17 +55,19 @@ fun AppViewModel.restoreSession() {
                 _mediaLibrary.value.find { it.path == path } ?: run {
                     val engineUri = audioEngine.getCurrentTrackUri()
                     val isCurrentActive = engineUri == path
+                    val isLastPlayed = session.lastTrackPath == path
                     
-                    if (isCurrentActive) {
+                    if (isCurrentActive || isLastPlayed) {
                         org.audiocular.peq.app.data.pEQMediaItem(
                             id = "engine_${path.hashCode()}",
-                            title = session.lastTrackTitle ?: "Active Stream",
+                            title = session.lastTrackTitle ?: path.substringAfterLast("/").substringBeforeLast("."),
                             subtitle = session.lastTrackArtist ?: "Neural Engine",
+                            artist = session.lastTrackArtist,
                             path = path,
                             thumbnail = session.lastTrackThumbnail,
-                            type = if (path.lowercase().contains("video") || path.lowercase().contains(".mp4")) 
+                            type = if (path.lowercase().let { it.contains("video") || it.contains(".mp4") || it.contains(".mkv") }) 
                                 org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
-                            format = "PROBED",
+                            format = path.substringAfterLast(".").uppercase(),
                             sizeBytes = 0L,
                             durationMs = 0L
                         )

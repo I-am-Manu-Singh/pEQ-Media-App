@@ -470,12 +470,9 @@ class pEQMediaSessionService : MediaSessionService() {
 
         widgetProgressJob =
             serviceScope.launch {
-
                 while (isActive) {
-
                     updateWidgetProgress()
-
-                    delay(750)
+                    delay(5000)
                 }
             }
     }

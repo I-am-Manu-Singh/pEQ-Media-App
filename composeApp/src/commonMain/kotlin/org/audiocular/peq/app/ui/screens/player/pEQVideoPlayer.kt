@@ -1,5 +1,6 @@
 package org.audiocular.peq.app.ui.screens.player
 
+import org.audiocular.peq.app.ui.viewmodel.requestChaptersPicker
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.*
@@ -719,7 +720,7 @@ private fun ImmersiveControlsRow(viewModel: AppViewModel, item: pEQMediaItem) {
             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f)
         ) {
             Box(contentAlignment = Alignment.Center) { 
-                Text("${viewModel.playbackSpeed}x", fontSize = 10.sp, fontWeight = FontWeight.Black) 
+                Text("${viewModel.playbackSpeed.value}x", fontSize = 10.sp, fontWeight = FontWeight.Black) 
             }
         }
         MiniControlButton(icon = Icons.Default.Shuffle, active = viewModel.isShuffleEnabled) { viewModel.toggleShuffle() }
@@ -941,13 +942,15 @@ public fun ChapterOverlayConsole(
                             viewModel.fetchChapters()
                         }
                     ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Download,
-
-                            contentDescription = null
-                        )
+                        Icon(imageVector = Icons.Default.Download, contentDescription = "Online")
+                    }
+                    
+                    FilledTonalIconButton(
+                        onClick = {
+                            viewModel.requestChaptersPicker()
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = "Import")
                     }
 
                     FilledIconButton(

@@ -322,9 +322,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (::viewModel.isInitialized) {
-            // Handle notification clicks or deep links
-            println("pEQControl: [SYSTEM] Activity re-synced via intent.")
+        if (intent == null || !::viewModel.isInitialized) return
+        
+        when (intent.action) {
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data
+                if (uri != null) {
+                    val path = if (uri.scheme == "file") uri.path else uri.toString()
+                    path?.let {
+                        lifecycleScope.launch {
+                            delay(500) // Small delay for engine stabilization
+                            viewModel.playExternalFile(it)
+                            println("pEQControl: [SYSTEM] Playing external intent: $it")
+                        }
+                    }
+                }
+            }
+            else -> {
+                println("pEQControl: [SYSTEM] Activity re-synced via intent: ${intent.action}")
+            }
         }
     }
 

@@ -32,6 +32,7 @@ interface PersistenceManager {
     
     fun saveMostPlayed(playCounts: Map<String, Int>)
     fun loadMostPlayed(): Map<String, Int>
+    fun saveOpenSubtitlesApiKey(key: String)
 }
 
 expect fun getPersistenceManager(): PersistenceManager

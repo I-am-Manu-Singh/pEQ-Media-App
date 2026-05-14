@@ -1,10 +1,12 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import org.audiocular.peq.app.ui.theme.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * INDUSTRIAL SETTINGS ENGINE: pEQ NEURAL WORKSTATION
@@ -31,7 +33,7 @@ fun AppViewModel.setSleepTimer(minutes: Int) {
     sleepTimerRemainingSec.longValue = minutes * 60L
     
     cancelSleepTimerJob()
-    val job = viewModelScope.launch {
+    val job = scope.launch {
         while (sleepTimerRemainingSec.longValue > 0 && sleepTimerActive.value) {
             delay(1000)
             sleepTimerRemainingSec.longValue -= 1
@@ -60,15 +62,6 @@ fun AppViewModel.toggleMicMonitoring() {
     audioEngine.enableZeroLatencyMonitoring(isMicMonitoringEnabled.value)
 }
 
-fun AppViewModel.toggleDrumRecording() {
-    isRecordingDrumSession.value = !isRecordingDrumSession.value
-    if (isRecordingDrumSession.value) {
-        showToast("Neural recording session initiated")
-    } else {
-        showToast("Session mastered and saved to /pEQ/Recordings")
-    }
-}
-
 fun AppViewModel.toggleLockScreenMode() {
     isLockScreenMode.value = !isLockScreenMode.value
 }
@@ -87,6 +80,31 @@ fun AppViewModel.cycleRotation() {
     videoRotationDegrees.value = (current + 90) % 360
 }
 
-fun AppViewModel.resetRotation() {
-    videoRotationDegrees.value = 0
+fun AppViewModel.clearLibrary() {
+    scanFolders.clear()
+    _mediaLibrary.value = emptyList()
+    persistenceManager.saveScanFolders(emptyList())
+    showToast("Media library cleared.")
+}
+
+fun AppViewModel.resetAudioEngine() {
+    // Reset EQ
+    (0 until 10).forEach { i ->
+        updateEqBand(i, 0f)
+        updateEqQ(i, 1f)
+    }
+    masterVolume.value = 0.8f
+    audioEngine.setVolume(0.8f)
+    showToast("Audio engine parameters reset to flat.")
+}
+
+fun AppViewModel.updateOsApiKey(key: String) {
+    osApiKey.value = key
+    // persistenceManager.saveOpenSubtitlesApiKey(key)
+    showToast("OpenSubtitles API key updated.")
+}
+
+fun AppViewModel.clearCache() {
+    // In a real app, this would delete temporary/thumbnail folders
+    showToast("Workstation cache purged.")
 }

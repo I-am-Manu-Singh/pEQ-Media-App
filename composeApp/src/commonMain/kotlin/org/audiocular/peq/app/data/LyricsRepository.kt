@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -24,6 +25,9 @@ class LyricsRepository {
             requestTimeoutMillis = 15000
             connectTimeoutMillis = 10000
             socketTimeoutMillis = 15000
+        }
+        install(io.ktor.client.plugins.DefaultRequest) {
+            header(io.ktor.http.HttpHeaders.UserAgent, "pEQ-Workstation/1.0 (Desktop; Kotlin Multiplatform)")
         }
     }
 
@@ -45,9 +49,16 @@ class LyricsRepository {
             return it
         }
 
-        val query =
+        val artistIsGeneric = normalizedArtist.isBlank() || normalizedArtist.contains("unknown", ignoreCase = true)
+        val titleIsGeneric = normalizedTitle.isBlank() || normalizedTitle.contains("unknown", ignoreCase = true)
+
+        val query = if (artistIsGeneric) {
+            normalizedTitle
+        } else {
             "$normalizedArtist $normalizedTitle"
-                .trim()
+        }.trim()
+
+        if (query.isBlank()) return null
 
         val url =
             "https://lrclib.net/api/search?q=${query.encodeURLPathPart()}"
@@ -148,30 +159,13 @@ class LyricsRepository {
     private fun normalizeTitle(title: String): String {
         return title
             .lowercase()
-            .replace(
-                Regex("\\(.*?\\)|\\[.*?\\]"),
-                ""
-            )
-            .replace(
-                Regex("feat\\..*", RegexOption.IGNORE_CASE),
-                ""
-            )
-            .replace(
-                Regex("ft\\..*", RegexOption.IGNORE_CASE),
-                ""
-            )
-            .replace(
-                Regex("- live.*", RegexOption.IGNORE_CASE),
-                ""
-            )
-            .replace(
-                Regex("- remaster.*", RegexOption.IGNORE_CASE),
-                ""
-            )
-            .replace(
-                Regex("\\s+"),
-                " "
-            )
+            .replace(Regex("\\(.*?\\)|\\[.*?\\]"), "")
+            .replace(Regex("(?i)\\b(official|music|video|audio|lyrics|hd|4k|hq|full song|original|mix|remix)\\b"), "")
+            .replace(Regex("(?i)feat\\..*"), "")
+            .replace(Regex("(?i)ft\\..*"), "")
+            .replace(Regex("(?i)- live.*"), "")
+            .replace(Regex("(?i)- remaster.*"), "")
+            .replace(Regex("\\s+"), " ")
             .trim()
     }
 

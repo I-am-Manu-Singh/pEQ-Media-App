@@ -98,61 +98,68 @@ fun NeuralAudioWorkstation(
             val isLandscape = maxWidth > maxHeight
 
             if (isLandscape) {
-                Row(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(18.dp)) {
-                    Box(modifier = Modifier.weight(1.08f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize().padding(8.dp),
-                            shape = RoundedCornerShape(34.dp),
-                            color = Color.Transparent
-                        ) {
+                val isDesktopWide = maxWidth > 1100.dp
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    // =========================
+                    // COLUMN 1: NAVIGATION & INFO/LYRICS
+                    // =========================
+                    Box(
+                        modifier = Modifier
+                            .weight(if (isDesktopWide) 1.2f else 1.1f)
+                            .fillMaxHeight()
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Persistent Back Button
+                            FilledTonalIconButton(
+                                onClick = { viewModel.currentTab.value = Tab.Dashboard },
+                                modifier = Modifier.size(48.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, modifier = Modifier.size(24.dp))
+                            }
+                            
+                            Spacer(Modifier.height(24.dp))
+                            
                             AnimatedContent(
                                 targetState = isLyricsVisible,
-                                transitionSpec = {
-                                    fadeIn(animationSpec = tween(260)) togetherWith fadeOut(animationSpec = tween(180))
-                                },
-                                label = "landscape_switch"
+                                modifier = Modifier.weight(1f),
+                                label = "landscape_content"
                             ) { showLyrics ->
-                                if (showLyrics) {
-                                        LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize().padding(14.dp))
+                                if (showLyrics && viewModel.syncedLyrics.isNotEmpty()) {
+                                    LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                                 } else {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        IconButton(
-                                            onClick = { viewModel.currentTab.value = Tab.Dashboard },
-                                            modifier = Modifier.align(Alignment.TopStart).padding(8.dp).zIndex(1f)
-                                        ) {
-                                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.onSurface)
-                                        }
-                                        when (visualizerMode) {
-                                            AppViewModel.VisualizerMode.CIRCULAR -> {
-                                                CircularSpectrumAnalyzer(magnitudes = rtaData)
-                                            }
-                                            else -> {
-                                                AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
-                                            }
-                                        }
-                                    }
+                                    LargeTrackInfo(currentItem)
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(18.dp))
-
+                    // =========================
+                    // COLUMN 2: CORE TRANSPORT CONTROLS
+                    // =========================
                     Surface(
-                        modifier = Modifier.weight(0.92f).fillMaxHeight(),
-                        shape = RoundedCornerShape(34.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                        tonalElevation = 10.dp,
-                        shadowElevation = 18.dp
+                        modifier = Modifier
+                            .weight(1.0f)
+                            .fillMaxHeight(),
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                     ) {
-                        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             NeuralHeaderPlayerControls(viewModel)
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = currentItem.title.ifBlank { "Unknown Track" }, fontSize = 22.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = currentItem.subtitle.ifBlank { "Unknown Artist" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
                             Spacer(modifier = Modifier.height(18.dp))
                             TransportControlsRestored(viewModel)
                             Spacer(modifier = Modifier.height(18.dp))
@@ -163,8 +170,30 @@ fun NeuralAudioWorkstation(
                             TransmissionTelemetry(viewModel = viewModel, item = currentItem)
                         }
                     }
+
+                    // =========================
+                    // COLUMN 3: ENGINE VISUALS (Desktop Wide Only)
+                    // =========================
+                    if (isDesktopWide) {
+                        Box(
+                            modifier = Modifier
+                                .weight(0.8f)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
+                                Spacer(Modifier.height(40.dp))
+                                NowPlayingTelemetryCard(viewModel)
+                            }
+                        }
+                    }
                 }
-            } else {
+            }
+ else {
                 Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                     NeuralPlayerHeaderSimple(viewModel = viewModel, isLandscape = false)
 
@@ -927,5 +956,52 @@ fun LyricLineItem(
                 color = animatedColor
             )
         }
+    }
+}
+@Composable
+fun LargeTrackInfo(item: org.audiocular.peq.app.data.pEQMediaItem) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            modifier = Modifier.size(320.dp).shadow(24.dp, RoundedCornerShape(42.dp)),
+            shape = RoundedCornerShape(42.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            pEQImage(
+                data = item.thumbnail,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                mediaType = item.type
+            )
+        }
+        
+        Spacer(Modifier.height(48.dp))
+        
+        Text(
+            text = item.title,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 42.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            ),
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        
+        Spacer(Modifier.height(12.dp))
+        
+        Text(
+            text = item.subtitle,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 18.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                letterSpacing = 1.sp
+            )
+        )
     }
 }

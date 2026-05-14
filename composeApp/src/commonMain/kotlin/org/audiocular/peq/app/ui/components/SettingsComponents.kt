@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.ui.viewmodel.*
@@ -77,12 +78,99 @@ fun SettingsPanel(viewModel: AppViewModel) {
                 TogglePreference("Neural Gapless Playback", "Enable smooth transitions between workstation tracks", viewModel.isGaplessEnabled.value) { viewModel.isGaplessEnabled.value = it }
                 TogglePreference("Hardware Bit-Perfect Mode", "Bypass system mixer for high-resolution DAC output", viewModel.isBitPerfectEnabled.value) { viewModel.isBitPerfectEnabled.value = it }
                 TogglePreference("Haptic Feedback Orchestration", "Synchronize tactile response with neural transients", viewModel.isHapticsEnabled.value) { viewModel.isHapticsEnabled.value = it }
+                
+                Spacer(Modifier.height(8.dp))
+                ActionPreference("Reset Neural Parameters", "Restore EQ and Master gains to flat state", Icons.Default.RestartAlt) {
+                    viewModel.resetAudioEngine()
+                }
+            }
+            
+            // Services Section
+            SettingsSection("API SERVICES", icon = Icons.Default.Cloud) {
+                InputPreference(
+                    label = "OpenSubtitles API Key",
+                    desc = "Required for cloud-based subtitle retrieval",
+                    value = viewModel.osApiKey.value,
+                    onValueChange = { viewModel.updateOsApiKey(it) }
+                )
             }
             
             // Backup & Persistence
-            SettingsSection("ARCHIVE PERSISTENCE", icon = Icons.Default.SdStorage) {
+            SettingsSection("ARCHIVE MAINTENANCE", icon = Icons.Default.SdStorage) {
                 TogglePreference("Auto-Scan Archives", "Automatically refresh library on system changes", viewModel.isAutoScanEnabled.value) { viewModel.isAutoScanEnabled.value = it }
-                TogglePreference("Neural Saturation", "Apply AI-driven harmonic enhancement to global output", viewModel.isNeuralSaturationEnabled.value) { viewModel.isNeuralSaturationEnabled.value = it }
+                
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        ActionPreference("Refresh Index", "Scan all folders for new media", Icons.Default.Refresh) {
+                            viewModel.refreshLibrary()
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        ActionPreference("Clear Archive", "Purge all indexed metadata", Icons.Default.DeleteSweep) {
+                            viewModel.clearLibrary()
+                        }
+                    }
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                ActionPreference("Purge Workstation Cache", "Delete temporary thumbnails and lyrics", Icons.Default.Cached) {
+                    viewModel.clearCache()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InputPreference(label: String, desc: String, value: String, onValueChange: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(desc, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = TextStyle(fontSize = 13.sp),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActionPreference(label: String, desc: String, icon: ImageVector, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(desc, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             }
         }
     }

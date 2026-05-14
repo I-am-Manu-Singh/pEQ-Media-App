@@ -7,14 +7,60 @@ import kotlinx.datetime.Clock
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.*
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 /**
  * INDUSTRIAL PLAYER ENGINE: pEQ NEURAL WORKSTATION
  * This extension handles cinematic transport, mixer control, and playback metadata.
  */
 
+fun AppViewModel.stop() {
+    audioEngine.stop()
+    isPlaying.value = false
+}
+
 fun AppViewModel.togglePlayback() {
+    val enginePlaying = audioEngine.isPlaying()
+    
+    // Safety check: If UI thinks we are playing but engine is not, try to resume engine
+    if (isPlaying.value && !enginePlaying) {
+        audioEngine.resume()
+        return
+    }
+    
+    // Safety check: If engine is idle and we have an item, load it
+    if (!enginePlaying && audioEngine.getDuration() <= 0L) {
+        currentMediaItem.value?.let { item ->
+            audioEngine.loadTrack(item.path, item.title, item.artist, item.thumbnail)
+            audioEngine.resume()
+            isPlaying.value = true
+            return
+        }
+    }
+
     if (isPlaying.value) audioEngine.pause() else audioEngine.resume()
     isPlaying.value = !isPlaying.value
+}
+
+fun AppViewModel.playExternalFile(path: String) {
+    val fileName = path.substringAfterLast("/").substringBeforeLast(".")
+    val extension = path.substringAfterLast(".").lowercase()
+    val isVideo = listOf("mp4", "mkv", "webm", "mov", "avi", "3gp").contains(extension)
+    
+    val item = pEQMediaItem(
+        id = "external_${path.hashCode()}",
+        title = fileName,
+        subtitle = "External Source",
+        path = path,
+        type = if (isVideo) MediaType.VIDEO else MediaType.AUDIO,
+        format = extension.uppercase(),
+        sizeBytes = 0L,
+        durationMs = 0L
+    )
+    
+    playMediaItem(item, addToQueue = true)
 }
 
 fun AppViewModel.nextTrack() {
@@ -54,7 +100,7 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
     currentMediaItem.value = item
     syncedLyrics.clear()
     
-    viewModelScope.launch {
+    scope.launch {
         val playPath = if (item.path.startsWith("http") && (item.path.contains("youtube.com") || item.path.contains("youtu.be"))) {
             cloudDownloader?.getStreamUrl(item.path) ?: item.path
         } else item.path
@@ -137,7 +183,7 @@ fun AppViewModel.refreshAvailableTracks() {
 }
 
 fun AppViewModel.onTrackLoaded() {
-    viewModelScope.launch {
+    scope.launch {
         val engineMetadata = audioEngine.getEmbeddedMetadata()
         currentMediaItem.value = currentMediaItem.value?.copy(
             bitrate = engineMetadata.availableTracks.firstOrNull { it.type == TrackType.AUDIO }?.codec?.toIntOrNull() ?: 0,
@@ -159,7 +205,7 @@ fun AppViewModel.onTrackLoaded() {
 fun AppViewModel.trimMedia(_startMs: Long, _endMs: Long) {
     val current = currentMediaItem.value ?: return
     if (activeJob.value != null) return
-    viewModelScope.launch {
+    scope.launch {
         activeJob.value = SplitJob(
             id = "TRIM_${Clock.System.now().toEpochMilliseconds()}",
             name = "High-Fidelity Trim: ${current.title}",
@@ -230,7 +276,7 @@ fun AppViewModel.webSearchLyrics() {
 }
 
 fun AppViewModel.saveLyrics(lines: List<SyncedLine>) {
-    viewModelScope.launch {
+    scope.launch {
         currentMediaItem.value?.let { item ->
             audioEngine.saveEmbeddedLyrics(item.path, lines)
             showToast("Lyrics Saved Permanently")
@@ -239,7 +285,7 @@ fun AppViewModel.saveLyrics(lines: List<SyncedLine>) {
 }
 
 fun AppViewModel.saveSubtitles(lines: List<SyncedLine>) {
-    viewModelScope.launch {
+    scope.launch {
         currentMediaItem.value?.let { item ->
             audioEngine.saveEmbeddedSubtitles(item.path, lines)
             showToast("Subtitles Saved Permanently")
@@ -248,7 +294,7 @@ fun AppViewModel.saveSubtitles(lines: List<SyncedLine>) {
 }
 
 fun AppViewModel.saveChapters(chapters: List<MediaChapter>) {
-    viewModelScope.launch {
+    scope.launch {
         currentMediaItem.value?.let { item ->
             audioEngine.saveEmbeddedChapters(item.path, chapters)
             showToast("Chapters Saved Permanently")
@@ -359,14 +405,14 @@ fun AppViewModel.requestSubtitlePicker() { onPickSubtitleRequested?.invoke() }
 fun AppViewModel.requestChapterPicker() { onPickChaptersRequested?.invoke() }
 
 fun AppViewModel.loadExternalSubtitle(path: String) {
-    viewModelScope.launch {
+    scope.launch {
         audioEngine.addExternalSubtitle(path)
         showToast("Subtitle Linked: ${path.substringAfterLast("/")}")
     }
 }
 
 fun AppViewModel.loadExternalLyrics(content: String, path: String? = null) {
-    viewModelScope.launch {
+    scope.launch {
          val lines = parseLrcInternal(content)
          if (lines.isNotEmpty()) {
              syncedLyrics.clear()
@@ -378,14 +424,14 @@ fun AppViewModel.loadExternalLyrics(content: String, path: String? = null) {
 }
 
 fun AppViewModel.loadExternalChapters(path: String) {
-    viewModelScope.launch {
+    scope.launch {
          fetchChapters()
          showToast("Chapters Refreshed")
     }
 }
 
 fun AppViewModel.fetchChapters() {
-    viewModelScope.launch {
+    scope.launch {
         val chapters = audioEngine.getChapters()
         currentChapters.clear()
         currentChapters.addAll(chapters)

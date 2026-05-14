@@ -28,29 +28,45 @@ fun HardwareScreen(viewModel: AppViewModel) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val scrollState = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-            .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        // --- NOW PLAYING TELEMETRY ---
-        NowPlayingTelemetryCard(viewModel, primaryColor)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth > 900.dp
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .verticalScroll(scrollState)
+                .padding(if (isWide) 32.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // --- NOW PLAYING TELEMETRY ---
+            NowPlayingTelemetryCard(viewModel, primaryColor)
 
-        // --- HARDWARE CORE & STATUS ---
-        HardwareCoreSection(viewModel, primaryColor)
+            if (isWide) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        HardwareCoreSection(viewModel, primaryColor)
+                        SystemEngineRegistry(viewModel, primaryColor)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        CalibrationMasterSection(viewModel, primaryColor)
+                        AdvancedProtocolsSection(viewModel, primaryColor)
+                    }
+                }
+            } else {
+                // --- HARDWARE CORE & STATUS ---
+                HardwareCoreSection(viewModel, primaryColor)
 
-        // --- SYSTEM ENGINE REGISTRY ---
-        SystemEngineRegistry(viewModel, primaryColor)
+                // --- SYSTEM ENGINE REGISTRY ---
+                SystemEngineRegistry(viewModel, primaryColor)
 
-        // --- PROTOCOLS & CALIBRATION ---
-        CalibrationMasterSection(viewModel, primaryColor)
-        AdvancedProtocolsSection(viewModel, primaryColor)
-    
-
-        Spacer(Modifier.height(80.dp))
+                // --- PROTOCOLS & CALIBRATION ---
+                CalibrationMasterSection(viewModel, primaryColor)
+                AdvancedProtocolsSection(viewModel, primaryColor)
+            }
+        
+            Spacer(Modifier.height(80.dp))
+        }
     }
 }
 
@@ -284,9 +300,18 @@ private fun ArchiveCommandSection(viewModel: AppViewModel, primaryColor: Color) 
 @Composable
 private fun HardwareRegistrySection(viewModel: AppViewModel, primaryColor: Color) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HardwareControlItem(label = "OUTPUT DEVICE", value = "INTERNAL SPEAKER", desc = "Primary system output bridge", enabled = true)
-        HardwareControlItem(label = "USB AUDIO INTERFACE", value = "NOT CONNECTED", desc = "External 24-bit/192kHz bridge", enabled = false)
-        HardwareControlItem(label = "BLUETOOTH A2DP", value = "CONNECTED (LDAC)", desc = "High-fidelity wireless intake", enabled = true)
+        if (viewModel.connectedDevices.isEmpty()) {
+            HardwareControlItem(label = "OUTPUT DEVICE", value = "INTERNAL SPEAKER", desc = "Primary system output bridge", enabled = true)
+        } else {
+            viewModel.connectedDevices.forEach { device ->
+                HardwareControlItem(
+                    label = "OUTPUT DEVICE", 
+                    value = device.name, 
+                    desc = if (device.isHighRes) "High-fidelity ${device.sampleRate}kHz bridge" else "Standard system output bridge", 
+                    enabled = true
+                )
+            }
+        }
     }
 }
 

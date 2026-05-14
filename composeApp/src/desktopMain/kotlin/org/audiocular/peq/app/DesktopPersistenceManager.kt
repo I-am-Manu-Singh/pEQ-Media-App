@@ -30,7 +30,14 @@ class DesktopPersistenceManager : PersistenceManager {
             println("pEQControl: [PERSISTENCE] Error saving config: ${e.message}")
         }
     }
-
+       override var openSubtitlesApiKey: String
+    get() = getString("os_api_key", "") ?: ""
+    set(value) {
+        saveString("os_api_key", value)
+    }
+override fun saveOpenSubtitlesApiKey(key: String) {
+    openSubtitlesApiKey = key
+}
     override fun saveString(key: String, value: String) {
         data[key] = value
         save()

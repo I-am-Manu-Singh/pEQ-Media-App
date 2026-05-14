@@ -1,9 +1,12 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import org.audiocular.peq.app.data.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * INDUSTRIAL LEARN ENGINE: pEQ NEURAL WORKSTATION
@@ -80,16 +83,32 @@ fun AppViewModel.startKitBuilding() {
 }
 
 fun AppViewModel.observeMetronome() {
-    viewModelScope.launch {
-        while (true) {
-            if (isMetronomeActive.value) {
+    scope.launch {
+        while (isActive) {
+            if (isSequencerActive.value) {
+                val bpm = masterBpm.floatValue.coerceIn(40f, 240f)
+                val msPerStep = (60_000 / bpm / 4).toLong() // 16th notes
+                
+                val step = (currentStep.intValue + 1) % 16
+                currentStep.intValue = step
+                
+                if (sequencerSteps[step].value) {
+                    audioEngine.playDrumSample("KICK", step)
+                }
+                
+                // Add variety based on tutorial if active
+                selectedTutorial.value?.let { 
+                    // Simulate tutorial logic
+                }
+
+                delay(msPerStep)
+            } else if (isMetronomeActive.value) {
                 val bpm = masterBpm.floatValue.coerceIn(40f, 240f)
                 val msPerBeat = (60_000 / bpm).toLong()
-                
-                audioEngine.playDrumSample("HIHAT")
+                audioEngine.playDrumSample("METRONOME_TICK")
                 delay(msPerBeat)
             } else {
-                delay(250)
+                delay(100)
             }
         }
     }
@@ -98,13 +117,18 @@ fun AppViewModel.observeMetronome() {
 fun AppViewModel.tapTempo() {
     val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     tapTimes.add(now)
-    if (tapTimes.size > 4) tapTimes.removeAt(0)
+    if (tapTimes.size > 8) tapTimes.removeAt(0)
     
     if (tapTimes.size >= 2) {
-        val averageDiff = (tapTimes.last() - tapTimes.first()) / (tapTimes.size - 1)
-        if (averageDiff > 0) {
+        val totalDiff = tapTimes.last() - tapTimes.first()
+        val averageDiff = totalDiff / (tapTimes.size - 1)
+        if (averageDiff in 250..1500) { // 40 to 240 BPM
             val newBpm = 60000f / averageDiff
-            masterBpm.floatValue = newBpm.coerceIn(40f, 240f)
+            updateMasterBpm(newBpm)
         }
     }
+}
+
+fun AppViewModel.toggleDrumRecording() {
+    isRecordingDrumSession.value = !isRecordingDrumSession.value
 }

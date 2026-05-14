@@ -7,6 +7,10 @@ import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.ui.components.getSystemVolume
 import org.audiocular.peq.app.ui.components.setSystemVolume
 import kotlin.math.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * INDUSTRIAL HARDWARE ENGINE: pEQ NEURAL WORKSTATION
@@ -28,7 +32,14 @@ fun AppViewModel.startHardwarePolling() {
     viewModelScope.launch(Dispatchers.IO) {
         while (isActive) {
             // 🚀 Sync Commands from OS/Widget
-            val cmd = workstationRegistry["last_command"]
+            val cmd = withContext(Dispatchers.Main) {
+                val command = workstationRegistry["last_command"]
+                if (command != null) {
+                    workstationRegistry.remove("last_command")
+                }
+                command
+            }
+
             if (cmd != null) {
                 withContext(Dispatchers.Main) {
                     when (cmd) {
@@ -38,7 +49,6 @@ fun AppViewModel.startHardwarePolling() {
                         "TOGGLE_SHUFFLE" -> toggleShuffle()
                     }
                 }
-                workstationRegistry.remove("last_command")
             }
 
             val engineState = withContext(Dispatchers.Main) {
@@ -149,6 +159,16 @@ fun AppViewModel.startHardwarePolling() {
                     persistenceCounter = 0
                 }
             }
+
+            // 🔌 Poll Connected Devices (Every 3 seconds)
+            if (Clock.System.now().toEpochMilliseconds() % 3000 < 200) {
+                val devices = audioEngine.getConnectedDevices()
+                withContext(Dispatchers.Main) {
+                    connectedDevices.clear()
+                    connectedDevices.addAll(devices)
+                }
+            }
+
             delay(100)
         }
     }
@@ -175,7 +195,7 @@ fun AppViewModel.confirmDeviceSwitch() {
 }
 
 fun AppViewModel.runHardwareDiagnostics() {
-    viewModelScope.launch {
+    scope.launch {
         isDiagnosticRunning.value = true
         diagnosticLog.add("Initializing JNI Hook...")
         delay(500)

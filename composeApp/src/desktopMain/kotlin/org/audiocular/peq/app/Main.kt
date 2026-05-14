@@ -25,14 +25,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
 import kotlinx.coroutines.delay
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import org.audiocular.peq.app.ui.viewmodel.*
 import androidx.compose.ui.graphics.graphicsLayer
 import java.awt.Taskbar
 import java.awt.Toolkit
 import javax.imageio.ImageIO
 import java.io.File
+import org.audiocular.peq.app.audio.DesktopAudioEngine
 
-fun main() {
+fun main(args: Array<String>) {
     // 🏷️ Fix macOS "Java" name in menu and dock
     System.setProperty("apple.awt.application.name", "pEQ Neural Workstation")
     System.setProperty("com.apple.mrj.application.apple.menu.about.name", "pEQ Neural Workstation")
@@ -42,7 +43,7 @@ fun main() {
     application {
         val viewModel = remember {
             AppViewModel(
-                audioEngine = AndroidAudioEngine(),
+                audioEngine = DesktopAudioEngine(),
                 persistenceManager = DesktopPersistenceManager(),
                 stemSplitter = null,
                 cloudDownloader = null
@@ -51,7 +52,31 @@ fun main() {
                 platformStorageBase.value = System.getProperty("user.home")
                 
                 onPickFolderRequested = {
-                    DesktopFilePicker.pickFolder("Select Media Folder")?.let { addScanFolder(it) }
+                    DesktopFilePicker
+                        .pickFolder("Select Media Folder")
+                        ?.let { folder ->
+                            addScanFolder(folder)
+                        }
+                }
+                
+                onPickSubtitleRequested = {
+                    DesktopFilePicker.pickFile("Select Subtitle File", listOf("srt", "vtt"))?.let { path ->
+                        importSubtitleFile(path)
+                    }
+                }
+                
+                onPickChaptersRequested = {
+                    DesktopFilePicker.pickFile("Select Chapter File", listOf("txt", "chapter", "lrc"))?.let { path ->
+                        importChapterFile(path)
+                    }
+                }
+
+                // Handle startup arguments
+                if (args.isNotEmpty()) {
+                    val path = args[0]
+                    if (File(path).exists()) {
+                        playExternalFile(path)
+                    }
                 }
             }
         }
@@ -114,16 +139,32 @@ fun main() {
                                 viewModel.togglePlayback()
                                 true
                             }
+                            Key.K -> {
+                                viewModel.togglePlayback()
+                                true
+                            }
                             Key.P -> {
                                 viewModel.isPiPMode.value = !viewModel.isPiPMode.value
+                                true
+                            }
+                            Key.F -> {
+                                viewModel.isVideoFullScreen.value = !viewModel.isVideoFullScreen.value
                                 true
                             }
                             Key.DirectionRight -> {
                                 viewModel.seekRelative(5000)
                                 true
                             }
+                            Key.L -> {
+                                viewModel.seekRelative(10000)
+                                true
+                            }
                             Key.DirectionLeft -> {
                                 viewModel.seekRelative(-5000)
+                                true
+                            }
+                            Key.J -> {
+                                viewModel.seekRelative(-10000)
                                 true
                             }
                             Key.M -> {
@@ -136,6 +177,18 @@ fun main() {
                             }
                             Key.DirectionDown -> {
                                 viewModel.masterVolume.value = (viewModel.masterVolume.value - 0.05f).coerceIn(0f, 1f)
+                                true
+                            }
+                            Key.N -> {
+                                viewModel.nextTrack()
+                                true
+                            }
+                            Key.B -> {
+                                viewModel.previousTrack()
+                                true
+                            }
+                            Key.S -> {
+                                viewModel.stop()
                                 true
                             }
                             Key.MediaPlayPause -> {
@@ -196,10 +249,18 @@ fun main() {
             icon = icon,
             tooltip = "pEQ Neural Workstation",
             menu = {
+                val currentTrack = viewModel.currentMediaItem.value?.title ?: "pEQ Neural"
+                val currentArtist = viewModel.currentMediaItem.value?.artist ?: "Neural Workstation"
+                
+                Item("Now Playing: $currentTrack", enabled = false, onClick = {})
+                Item("by $currentArtist", enabled = false, onClick = {})
+                Separator()
                 Item("Restore Workstation", onClick = { isVisible = true })
                 Item(if (viewModel.showMiniPlayer.value) "Hide Remote Hub" else "Show Remote Hub", onClick = { viewModel.showMiniPlayer.value = !viewModel.showMiniPlayer.value })
                 Separator()
-                Item("Play / Pause", onClick = { viewModel.togglePlayback() })
+                Item(if (viewModel.isPlaying.value) "⏸ Pause" else "▶️ Play", onClick = { viewModel.togglePlayback() })
+                Item("⏭ Next Track", onClick = { viewModel.nextTrack() })
+                Item("⏮ Previous Track", onClick = { viewModel.previousTrack() })
                 Separator()
                 CheckboxItem(
                     "Open at Startup",

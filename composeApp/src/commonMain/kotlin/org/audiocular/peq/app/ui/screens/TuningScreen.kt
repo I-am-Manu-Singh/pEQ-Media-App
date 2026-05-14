@@ -29,9 +29,8 @@ import org.audiocular.peq.app.ui.viewmodel.searchAutoEqRepository
 import org.audiocular.peq.app.ui.viewmodel.applyAutoEqProfile
 import org.audiocular.peq.app.ui.components.pEQGlassCard
 import org.audiocular.peq.app.ui.components.ChordVisualizer
-import kotlin.math.PI
-import kotlin.math.sin
 import org.audiocular.peq.app.ui.components.*
+import kotlin.math.*
 import androidx.compose.ui.text.font.FontFamily
 import org.audiocular.peq.app.data.Preset
 @OptIn(ExperimentalLayoutApi::class)
@@ -77,132 +76,57 @@ fun TuningScreen(
                 )
         )
 
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth > 1000.dp
+        
         LazyColumn(
-
             modifier = Modifier.fillMaxSize(),
-
             contentPadding = PaddingValues(
-                horizontal = 18.dp,
+                horizontal = if (isWide) 32.dp else 18.dp,
                 vertical = 18.dp
             ),
-
-            verticalArrangement =
-                Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-
-            /*
-             * HEADER
-             */
-
             item {
-
                 Column {
-
-                    Text(
-                        text = "TUNING",
-
-                        fontSize = 12.sp,
-
-                        fontWeight = FontWeight.Black,
-
-                        letterSpacing = 3.sp,
-
-                        color = primaryColor
-                    )
-
+                    Text(text = "TUNING", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, color = primaryColor)
                     Spacer(Modifier.height(6.dp))
-
-                    Text(
-                        text = "AUDIO SUITE",
-
-                        fontSize = 34.sp,
-
-                        fontWeight = FontWeight.Black,
-
-                        color = colorScheme.onSurface
-                    )
-
+                    Text(text = "AUDIO SUITE", fontSize = 34.sp, fontWeight = FontWeight.Black, color = colorScheme.onSurface)
                     Spacer(Modifier.height(8.dp))
-
-                    Text(
-                        text =
-                            "PARAMETRIC DSP • AUTO-EQ • CONVOLUTION ENGINE",
-
-                        fontSize = 10.sp,
-
-                        fontWeight = FontWeight.Bold,
-
-                        color =
-                            colorScheme.onSurface
-                                .copy(alpha = 0.42f),
-
-                        letterSpacing = 1.sp
-                    )
+                    Text(text = "PARAMETRIC DSP • AUTO-EQ • CONVOLUTION ENGINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colorScheme.onSurface.copy(alpha = 0.42f), letterSpacing = 1.sp)
                 }
             }
 
-            /*
-             * NOW PLAYING
-             */
-
             item {
-
-                NowPlayingTelemetryCard(
-                    viewModel,
-                    primaryColor
-                )
+                NowPlayingTelemetryCard(viewModel, primaryColor)
             }
 
-            /*
-             * SIGNAL TOPOLOGY
-             */
-
-            item {
-
-                SignalTopologySection(
-                    viewModel,
-                    primaryColor
-                )
-            }
-             item {
-            IndustrialDiagnosticsSection(
-                viewModel,
-                primaryColor
-            )
-        }
-
-            /*
-             * MASTERING CHAIN
-             */
-
-            item {
-
-                MasteringChainSection(
-                    viewModel,
-                    primaryColor
-                )
-            }
-
-            /*
-             * AUTO EQ
-             */
-
-            item {
-
-                AutoEqSection(
-                    viewModel,
-                    primaryColor
-                )
+            if (isWide) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Column(modifier = Modifier.weight(1.2f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            SignalTopologySection(viewModel, primaryColor)
+                            MasteringChainSection(viewModel, primaryColor)
+                        }
+                        Column(modifier = Modifier.weight(0.8f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            IndustrialDiagnosticsSection(viewModel, primaryColor)
+                            AutoEqSection(viewModel, primaryColor)
+                        }
+                    }
+                }
+            } else {
+                item { SignalTopologySection(viewModel, primaryColor) }
+                item { IndustrialDiagnosticsSection(viewModel, primaryColor) }
+                item { MasteringChainSection(viewModel, primaryColor) }
+                item { AutoEqSection(viewModel, primaryColor) }
             }
 
             item {
-
-                Spacer(
-                    modifier = Modifier.height(80.dp)
-                )
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
+}
 }
 
 /*
@@ -1272,6 +1196,40 @@ private fun ConvolutionDynamicsSection(
                                 it
                         }
                     )
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // --- CONVOLUTION CURVE VISUALIZATION ---
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(0.1f))
+                        .border(1.dp, primaryColor.copy(0.1f), RoundedCornerShape(12.dp))
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        val path = Path()
+                        val w = size.width
+                        val h = size.height
+                        path.moveTo(0f, h * 0.8f)
+                        
+                        // Simulate IR decay curve
+                        for (i in 0..100) {
+                            val x = (i / 100f) * w
+                            val decay = exp(-i / 20f).toFloat()
+                            val noise = (sin(i * 0.8f) * 0.1f * decay).toFloat()
+                            val y = h * 0.8f - (decay + noise) * h * 0.7f
+                            path.lineTo(x, y.coerceIn(0f, h))
+                        }
+                        
+                        drawPath(
+                            path = path,
+                            color = primaryColor.copy(if (viewModel.isConvolverActive.value) 0.8f else 0.2f),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(18.dp))

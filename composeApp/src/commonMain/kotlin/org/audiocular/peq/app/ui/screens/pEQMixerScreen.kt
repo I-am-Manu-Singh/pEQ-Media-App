@@ -602,17 +602,14 @@ private fun StemConsoleSection(
          * No horizontal scrolling circus anymore.
          */
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(430.dp),
-
-            horizontalArrangement =
-                Arrangement.SpaceEvenly,
-
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(480.dp)) {
+            val isWide = maxWidth > 800.dp
+            
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = if (isWide) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
 
             activeStems.take(6).forEach { stem ->
 
@@ -656,9 +653,10 @@ private fun StemConsoleSection(
                         viewModel.updateStemPan(
                             stem,
                             it
-                        )
-                    }
-                )
+                            )
+                        }
+                    )
+                }
             }
         }
     }

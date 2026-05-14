@@ -1,11 +1,15 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
 import org.audiocular.peq.app.data.*
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.Clock
 /**
  * Extension for AppViewModel to handle Library scanning and File management.
  */
@@ -32,7 +36,7 @@ fun AppViewModel.openCurrentItemFolder() {
 
 fun AppViewModel.observeScanner() {
     val scanner = _scanner ?: return
-    viewModelScope.launch {
+    scope.launch {
         combine(
             scanner.audioFiles, 
             scanner.mediaFiles, 
@@ -83,10 +87,10 @@ fun AppViewModel.observeScanner() {
         }
     }
 
-    viewModelScope.launch {
+    scope.launch {
         scanner.scanProgress.collect { scanProgress.value = it }
     }
-    viewModelScope.launch {
+    scope.launch {
         scanner.scanStatus.collect { scanStatus.value = it }
     }
 }
@@ -195,7 +199,7 @@ fun AppViewModel.requestFolderPicker() {
 }
 
 fun AppViewModel.observeLibraryState() {
-    viewModelScope.launch {
+    scope.launch {
         snapshotFlow {
             Pair(currentFolderPath.value, showFolders.value)
         }.collect { (path, show) ->
@@ -218,5 +222,16 @@ fun AppViewModel.toggleSelection(item: pEQMediaItem) {
 }
 
 fun AppViewModel.updateMostPlayed(item: pEQMediaItem) {
-    // Placeholder for actual play count increment logic if handled elsewhere
+    val count = playCounts.getOrDefault(item.path, 0) + 1
+    playCounts[item.path] = count
+    lastPlayed[item.path] = Clock.System.now().toEpochMilliseconds()
+    
+    // Refresh most played list
+    val sorted = mediaLibrary.value
+        .filter { (playCounts[it.path] ?: 0) > 0 }
+        .sortedByDescending { playCounts[it.path] ?: 0 }
+        .take(10)
+    
+    mostPlayedItems.clear()
+    mostPlayedItems.addAll(sorted)
 }

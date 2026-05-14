@@ -183,31 +183,8 @@ fun SystemStatusTab(viewModel: AppViewModel) {
             )
         }
 
-        // 🧩 MODULE SHORTCUTS
-        SystemSectionBlock(title = "MODULE QUICK-ACCESS", icon = Icons.Default.Extension) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModuleShortcut(label = "TUNING", icon = Icons.Default.GraphicEq, modifier = Modifier.weight(1f)) { viewModel.currentTab.value = Tab.Tuning }
-                ModuleShortcut(label = "HARDWARE", icon = Icons.Default.Router, modifier = Modifier.weight(1f)) { viewModel.currentTab.value = Tab.Hardware }
-                ModuleShortcut(label = "MIXER", icon = Icons.Default.Tune, modifier = Modifier.weight(1f)) { viewModel.currentTab.value = Tab.Mixer }
-            }
-        }
 
-        // ☁️ CLOUD CONFIGURATION
-        SystemSectionBlock(title = "CLOUD INTEGRATION", icon = Icons.Default.Cloud) {
-            OutlinedTextField(
-                value = viewModel.persistenceManager.openSubtitlesApiKey,
-                onValueChange = { viewModel.persistenceManager.openSubtitlesApiKey = it },
-                label = { Text("OpenSubtitles API Manifest", fontSize = 11.sp) },
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                shape = RoundedCornerShape(14.dp),
-                textStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-            )
-        }
+        
 
 
         Spacer(Modifier.height(110.dp))

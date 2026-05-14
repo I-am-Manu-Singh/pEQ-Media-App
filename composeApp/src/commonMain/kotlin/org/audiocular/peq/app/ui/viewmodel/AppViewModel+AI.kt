@@ -1,12 +1,14 @@
 package org.audiocular.peq.app.ui.viewmodel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.datetime.Clock
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.ai.pEQStemSplitter
-
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Extension for AppViewModel to handle AI and Neural Stem Splitter logic.
  */
@@ -18,7 +20,7 @@ fun AppViewModel.startStemSplit() {
         return
     }
 
-    viewModelScope.launch {
+    scope.launch {
         activeJob.value = SplitJob(
             id = "STEM_${Clock.System.now().toEpochMilliseconds()}",
             name = "Neural Stem Extraction",
@@ -45,7 +47,7 @@ fun AppViewModel.startStemSplit() {
 
 fun AppViewModel.batchExportStems(items: List<pEQMediaItem>) {
     val splitter = stemSplitter ?: return
-    viewModelScope.launch {
+    scope.launch {
         activeJob.value = SplitJob(
             id = "BATCH_${Clock.System.now().toEpochMilliseconds()}",
             name = "Neural Batch Export",

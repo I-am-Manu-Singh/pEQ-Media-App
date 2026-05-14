@@ -22,9 +22,11 @@ import org.audiocular.peq.app.ui.viewmodel.*
 fun DashboardHome(viewModel: AppViewModel) {
     val items by viewModel.mediaLibrary.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth > 1000.dp
+        
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = if (isWide) 32.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
             contentPadding = PaddingValues(top = 20.dp, bottom = 140.dp)
         ) {
@@ -55,25 +57,45 @@ fun DashboardHome(viewModel: AppViewModel) {
                 }
             }
 
-            // 🧠 NEURAL MOOD ENGINE
-            item {
-                NeuralMoodMakerItem(viewModel)
-            }
+            if (isWide) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                            // 🧠 NEURAL MOOD ENGINE
+                            NeuralMoodMakerItem(viewModel)
+                            
+                            SectionHeader("ARCHIVE COMMAND STATION")
+                            ArchiveCommandCard(viewModel)
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                            StreamingIntakeCard(viewModel)
+                            
+                            SectionHeader("MOST PLAYED")
+                            MostPlayedSection(viewModel)
+                        }
+                    }
+                }
+            } else {
+                // 🧠 NEURAL MOOD ENGINE
+                item {
+                    NeuralMoodMakerItem(viewModel)
+                }
 
-            // 📂 ARCHIVE COMMAND STATION
-            item {
-                SectionHeader("ARCHIVE COMMAND STATION")
-                Spacer(Modifier.height(12.dp))
-                ArchiveCommandCard(viewModel)
-                Spacer(Modifier.height(12.dp))
-                StreamingIntakeCard(viewModel)
-            }
+                // 📂 ARCHIVE COMMAND STATION
+                item {
+                    SectionHeader("ARCHIVE COMMAND STATION")
+                    Spacer(Modifier.height(12.dp))
+                    ArchiveCommandCard(viewModel)
+                    Spacer(Modifier.height(12.dp))
+                    StreamingIntakeCard(viewModel)
+                }
 
-            // 🚀 MOST PLAYED
-            item {
-                SectionHeader("MOST PLAYED")
-                Spacer(Modifier.height(12.dp))
-                MostPlayedSection(viewModel)
+                // 🚀 MOST PLAYED
+                item {
+                    SectionHeader("MOST PLAYED")
+                    Spacer(Modifier.height(12.dp))
+                    MostPlayedSection(viewModel)
+                }
             }
         }
     }

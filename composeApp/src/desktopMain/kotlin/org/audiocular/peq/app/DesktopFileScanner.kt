@@ -13,6 +13,8 @@ import java.util.UUID
 class DesktopFileScanner : pEQFileScanner {
     private val scope = CoroutineScope(Dispatchers.IO)
     
+    private val factory = uk.co.caprica.vlcj.factory.MediaPlayerFactory()
+    
     private val _mediaFiles = MutableStateFlow<List<VideoFile>>(emptyList())
     override val mediaFiles: StateFlow<List<VideoFile>> = _mediaFiles
 
@@ -30,51 +32,72 @@ class DesktopFileScanner : pEQFileScanner {
     override fun scan(includePaths: List<String>, excludePaths: List<String>) {
         included = includePaths
         scope.launch {
-            _scanStatus.value = "Scanning..."
+            _scanStatus.value = "Scanning Archive..."
             val videos = mutableListOf<VideoFile>()
             val audios = mutableListOf<AudioFile>()
             
             includePaths.forEach { path ->
-                val root = File(path)
-                if (root.exists() && root.isDirectory) {
-                    val allFiles = root.walkTopDown().filter { it.isFile }.toList()
-                    val total = allFiles.size.toFloat()
+                val target = File(path)
+                if (target.exists()) {
+                    val filesToScan = if (target.isDirectory) {
+                        target.walkTopDown().filter { it.isFile }.toList()
+                    } else {
+                        listOf(target)
+                    }
+                    
+                    val total = filesToScan.size.toFloat()
                     var processed = 0
                     
-                    allFiles.forEach { file ->
+                    filesToScan.forEach { file ->
                         processed++
-                        _scanProgress.value = processed / total
+                        if (total > 0) _scanProgress.value = processed / total
                         
-                        when (file.extension.lowercase()) {
-                            "mp4", "mkv", "mov", "avi" -> {
+                        val extension = file.extension.lowercase()
+                        if (!listOf("mp3", "wav", "flac", "m4a", "ogg", "aac", "mp4", "mkv", "mov", "avi", "webm", "3gp").contains(extension)) return@forEach
+                        
+                        // Use VLC to probe metadata
+                        val media = factory.media().newMedia(file.absolutePath)
+                        val duration = media.info()?.duration() ?: 0L
+                        
+                        // We need to parse metadata
+                        val meta = media.meta()
+                        val title = meta?.get(uk.co.caprica.vlcj.media.Meta.TITLE) ?: file.nameWithoutExtension
+                        val artist = meta?.get(uk.co.caprica.vlcj.media.Meta.ARTIST) ?: file.parentFile?.name ?: "Unknown Artist"
+                        val album = meta?.get(uk.co.caprica.vlcj.media.Meta.ALBUM) ?: file.parentFile?.name ?: "Unknown Album"
+                        
+                        val thumbnailPath = findThumbnail(file) ?: extractEmbeddedArt(file)
+                        
+                        when (extension) {
+                            "mp4", "mkv", "mov", "avi", "webm", "3gp" -> {
                                 videos.add(VideoFile(
-                                    id = UUID.randomUUID().toString(),
+                                    id = "v_${file.absolutePath.hashCode()}",
                                     name = file.name,
-                                    title = file.nameWithoutExtension,
+                                    title = title,
                                     path = file.absolutePath,
-                                    duration = 0,
+                                    duration = duration,
                                     sizeBytes = file.length(),
-                                    resolution = "Unknown",
+                                    resolution = "HD", // Placeholder
                                     dateModified = file.lastModified(),
-                                    thumbnail = file.absolutePath
+                                    thumbnail = thumbnailPath
                                 ))
                             }
-                            "mp3", "wav", "flac", "m4a", "ogg" -> {
-                                val meta = extractMetadata(file)
+                            else -> {
                                 audios.add(AudioFile(
-                                    id = UUID.randomUUID().toString(),
+                                    id = "a_${file.absolutePath.hashCode()}",
                                     name = file.name,
-                                    title = meta.title ?: file.nameWithoutExtension,
+                                    title = title,
                                     path = file.absolutePath,
-                                    duration = meta.duration,
+                                    duration = duration,
                                     sizeBytes = file.length(),
                                     dateModified = file.lastModified(),
-                                    artist = meta.artist ?: file.parentFile?.parentFile?.name ?: "Unknown Artist",
-                                    album = meta.album ?: file.parentFile?.name ?: "Unknown Album",
-                                    thumbnail = file.absolutePath
+                                    artist = artist,
+                                    album = album,
+                                    format = extension.uppercase(),
+                                    thumbnail = thumbnailPath
                                 ))
                             }
                         }
+                        media.release()
                     }
                 }
             }
@@ -86,30 +109,35 @@ class DesktopFileScanner : pEQFileScanner {
         }
     }
 
-    private data class MetaData(val title: String?, val artist: String?, val album: String?, val duration: Long = 0)
+    private fun extractEmbeddedArt(file: File): String? {
+        // VLCJ doesn't easily extract art to a file without playing, 
+        // but we can look for sidecar files as a fallback in findThumbnail.
+        return null 
+    }
 
-    private fun extractMetadata(file: File): MetaData {
-        // Simple metadata extraction for MP3/FLAC
-        // For a real app, use a library like jaudiotagger, but here we do a basic read
-        if (!file.exists()) return MetaData(null, null, null)
+    private fun findThumbnail(mediaFile: File): String? {
+        val folder = mediaFile.parentFile ?: return null
+        val patterns = listOf("cover", "folder", "album", "artwork", "front")
+        val extensions = listOf("jpg", "jpeg", "png", "webp")
         
-        try {
-            if (file.extension.lowercase() == "mp3") {
-                RandomAccessFile(file, "r").use { raf ->
-                    // Check for ID3v2
-                    val header = ByteArray(10)
-                    raf.readFully(header)
-                    if (header[0] == 'I'.toByte() && header[1] == 'D'.toByte() && header[2] == '3'.toByte()) {
-                        // Very basic ID3v2 parser would go here
-                        // For now, we fallback to filename-based but we've tried
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // Ignore parsing errors
+        // 1. Try to find an image with the same name as the media file
+        extensions.forEach { ext ->
+            val img = File(folder, "${mediaFile.nameWithoutExtension}.$ext")
+            if (img.exists()) return img.absolutePath
         }
         
-        return MetaData(null, null, null)
+        // 2. Try common folder patterns
+        folder.listFiles()?.forEach { file ->
+            if (file.isFile) {
+                val name = file.nameWithoutExtension.lowercase()
+                val ext = file.extension.lowercase()
+                if (name in patterns && ext in extensions) {
+                    return file.absolutePath
+                }
+            }
+        }
+        
+        return null
     }
 
     override fun setExcludedFolders(folders: List<String>) {}

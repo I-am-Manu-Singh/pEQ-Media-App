@@ -84,19 +84,42 @@ data class SessionState(
     val lastIrPath: String? = null
 )
 
-enum class Device(
-    val deviceName: String,
+@Serializable
+data class Device(
+    val name: String,
     val chip: String,
     val mode: String,
-    val color: androidx.compose.ui.graphics.Color,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val isFeatured: Boolean = true,
-    val activeProfile: String = "Reference Profile"
+    val activeProfile: String = "Reference Profile",
+    val sampleRate: Int = 44100,
+    val isHighRes: Boolean = false
 ) {
-    HI_RES_DAC("Pro Wired DAC", "Hi-Res Master", "Bit-Perfect", Color(59, 130, 246), Icons.Default.Headset),
-    WIRELESS_ADAPTER("Wireless DAC Adapter", "Hi-Res 990kbps", "Wireless Mode", Color(34, 211, 238), Icons.Default.BluetoothAudio),
-    GENERIC("Universal USB DAC", "UAC 2.0 Driver", "High-Gain", Color(100, 116, 139), Icons.Default.Usb),
-    INTERNAL("System Speakers", "Internal Audio", "Standard Mode", Color(245, 158, 11), Icons.Default.Speaker)
+    val deviceName: String get() = name
+    
+    // We can't easily serialize Color/ImageVector in commonMain without extra setup,
+    // so we'll use a helper to get them based on name/type if needed, or just provide defaults.
+    val color: Color get() = when(name) {
+        "Pro Wired DAC" -> Color(0xFF3B82F6)
+        "Wireless DAC Adapter" -> Color(0xFF22D3EE)
+        "Universal USB DAC" -> Color(0xFF64748B)
+        else -> Color(0xFFF59E0B)
+    }
+    
+    val icon: ImageVector get() = when(name) {
+        "Pro Wired DAC" -> Icons.Default.Headset
+        "Wireless DAC Adapter" -> Icons.Default.BluetoothAudio
+        "Universal USB DAC" -> Icons.Default.Usb
+        else -> Icons.Default.Speaker
+    }
+
+    companion object {
+        val HI_RES_DAC = Device("Pro Wired DAC", "Hi-Res Master", "Bit-Perfect", isHighRes = true, sampleRate = 192000)
+        val WIRELESS_ADAPTER = Device("Wireless DAC Adapter", "Hi-Res 990kbps", "Wireless Mode", sampleRate = 96000)
+        val GENERIC = Device("Universal USB DAC", "UAC 2.0 Driver", "High-Gain")
+        val INTERNAL = Device("System Speakers", "Internal Audio", "Standard Mode")
+        
+        fun values() = listOf(INTERNAL, HI_RES_DAC, WIRELESS_ADAPTER, GENERIC)
+    }
 }
 
 @Serializable

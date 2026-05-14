@@ -41,80 +41,67 @@ fun pEQLearnScreen(
 
     val primaryColor = MaterialTheme.colorScheme.primary
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth > 1000.dp
+        
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent),
 
-        contentPadding = PaddingValues(
-            horizontal = 16.dp,
-            vertical = 14.dp
-        ),
+            contentPadding = PaddingValues(
+                horizontal = if (isWide) 32.dp else 16.dp,
+                vertical = 14.dp
+            ),
 
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-
-        item {
-
-            Column {
-
-                Text(
-                    text = "LEARN",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    color = primaryColor,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                Text(
-                    text = "RHYTHM • TRAINING • ANALYSIS",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                )
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            item {
+                Column {
+                    Text(
+                        text = "LEARN",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = primaryColor,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "RHYTHM • TRAINING • ANALYSIS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                }
             }
-        }
 
-        item {
-            NowPlayingTelemetryCard(
-                viewModel,
-                primaryColor
-            )
-        }
+            item {
+                NowPlayingTelemetryCard(viewModel, primaryColor)
+            }
 
-        item {
-            SpectralFluxOverlay(
-                viewModel,
-                primaryColor
-            )
-        }
+            if (isWide) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            SpectralFluxOverlay(viewModel, primaryColor)
+                            RhythmLabSection(viewModel, primaryColor)
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            PerformanceAcademySection(viewModel, primaryColor)
+                            TuningMasterSection(viewModel, primaryColor)
+                        }
+                    }
+                }
+            } else {
+                item { SpectralFluxOverlay(viewModel, primaryColor) }
+                item { RhythmLabSection(viewModel, primaryColor) }
+                item { PerformanceAcademySection(viewModel, primaryColor) }
+                item { TuningMasterSection(viewModel, primaryColor) }
+            }
 
-        item {
-            RhythmLabSection(
-                viewModel,
-                primaryColor
-            )
-        }
-
-        item {
-            PerformanceAcademySection(
-                viewModel,
-                primaryColor
-            )
-        }
-
-        item {
-            TuningMasterSection(
-                viewModel,
-                primaryColor
-            )
-        }
-
-
-        item {
-            Spacer(Modifier.height(42.dp))
+            item {
+                Spacer(Modifier.height(42.dp))
+            }
         }
     }
 }

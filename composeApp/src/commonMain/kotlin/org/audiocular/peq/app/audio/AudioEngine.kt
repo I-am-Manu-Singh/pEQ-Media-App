@@ -96,6 +96,11 @@ interface AudioEngine {
     fun stopTuner() {}
     fun setMetronomeEnabled(enabled: Boolean) {}
     fun setBpm(bpm: Float) {}
+fun togglePlayback() {}
+
+fun nextTrack() {}
+
+fun previousTrack() {}
 
     fun release()
 }

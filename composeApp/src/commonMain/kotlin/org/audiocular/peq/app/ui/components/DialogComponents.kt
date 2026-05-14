@@ -62,12 +62,7 @@ private fun DeviceItem(device: Device, desc: String, viewModel: AppViewModel) {
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                when(device) {
-                    Device.HI_RES_DAC -> Icons.Default.Headset
-                    Device.INTERNAL -> Icons.Default.Speaker
-                    Device.WIRELESS_ADAPTER -> Icons.Default.Bluetooth
-                    Device.GENERIC -> Icons.Default.Usb
-                },
+                device.icon,
                 null,
                 tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )

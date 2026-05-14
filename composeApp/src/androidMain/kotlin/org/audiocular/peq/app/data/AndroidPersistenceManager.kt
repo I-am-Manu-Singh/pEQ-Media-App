@@ -217,3 +217,15 @@ actual fun getPersistenceManager(): PersistenceManager {
 fun initPersistenceManager(context: Context) {
     _instance = AndroidPersistenceManager(context)
 }
+
+override var openSubtitlesApiKey: String
+
+    get() = prefs.getString("os_api_key", "") ?: ""
+
+    set(value) = prefs.edit().putString("os_api_key", value).apply()
+
+override fun saveOpenSubtitlesApiKey(key: String) {
+
+    openSubtitlesApiKey = key
+
+}

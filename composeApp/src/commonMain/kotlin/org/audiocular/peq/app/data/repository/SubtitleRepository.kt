@@ -15,8 +15,9 @@ import kotlinx.serialization.Serializable
 import org.audiocular.peq.app.network.createHttpClient
 
 class SubtitleRepository(
-    private val apiKey: String
+    private val apiKeyProvider: () -> String
 ) {
+    private val apiKey get() = apiKeyProvider()
     private val client = createHttpClient().config {
         install(HttpTimeout) {
             requestTimeoutMillis = 10_000
@@ -35,7 +36,10 @@ class SubtitleRepository(
         language: String = "en",
         durationMs: Long = 0
     ): List<SubtitleMatch> {
-        if (apiKey.isBlank()) return emptyList()
+        if (apiKey.isBlank()) {
+            println("pEQControl: [SUBTITLES] No API Key provided")
+            return emptyList()
+        }
 
         val normalizedTitle = normalizeTitle(title)
         val cacheKey = "$normalizedTitle-$language-$season-$episode"

@@ -40,10 +40,16 @@ import org.audiocular.peq.app.ui.components.setSystemVolume
 import org.audiocular.peq.app.network.createHttpClient
 import org.audiocular.peq.app.ui.theme.pEQTheme
 import org.audiocular.peq.app.ui.theme.pEQAccent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withTimeoutOrNull
 
-
-
-class AppViewModel(
+open class AppViewModel(
 
     val audioEngine: AudioEngine,
 
@@ -172,6 +178,7 @@ val client = createHttpClient()
     val showSubtitleConsole = mutableStateOf(false)
     val showCutter = mutableStateOf(false)
     val subtitleSettings = mutableStateOf(SubtitleSettings())
+    val osApiKey = mutableStateOf(persistenceManager.openSubtitlesApiKey)
 
     val abRepeatActive = mutableStateOf(false)
     // Initialize with -1L instead of null
@@ -186,7 +193,7 @@ val client = createHttpClient()
     private val osClient by lazy { org.audiocular.peq.app.ai.OpenSubtitlesClient(persistenceManager.openSubtitlesApiKey) }
 
     internal val lyricsRepository = org.audiocular.peq.app.data.lyrics.LyricsRepository()
-    internal val subtitleRepository by lazy { org.audiocular.peq.app.data.repository.SubtitleRepository(persistenceManager.openSubtitlesApiKey) }
+    internal val subtitleRepository = org.audiocular.peq.app.data.repository.SubtitleRepository { osApiKey.value }
 
 
     val eqGains = mutableStateListOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f) // 10 Bands
@@ -233,13 +240,14 @@ val client = createHttpClient()
     val autoEqSearchResults = mutableStateListOf<AutoEqProfile>()
     val selectedAutoEqProfile = mutableStateOf<AutoEqProfile?>(null)
     val isAutoEqLoading = mutableStateOf(false)
-
-    init {
-        viewModelScope.launch {
-            snapshotFlow { masterVolume.value }
-                .collect { audioEngine.setVolume(it) }
-        }
-    }
+    
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    
+    internal val scanFolders = mutableStateListOf<String>()
+    internal val currentStep = mutableIntStateOf(0)
+    internal val isSequencerActive = mutableStateOf(false)
+    internal val drumTutorials = listOf(DrumTutorial("Basic Rock"), DrumTutorial("Trap Foundations"))
+    internal val selectedTutorial = mutableStateOf<DrumTutorial?>(null)
     
     // 🌀 Convolution & Dynamics Engine
     val convolverIrName = mutableStateOf("Reference Room (Default)")
@@ -288,19 +296,6 @@ val client = createHttpClient()
     val isNeuralEnvActive = mutableStateOf(false)
     val activeJob = mutableStateOf<SplitJob?>(null)
 
-    init {
-        observeScanner()
-        observeMetronome()
-        
-        // 🚀 Automatic Metadata & Lyric Fetching
-        viewModelScope.launch {
-            snapshotFlow { currentMediaItem.value }.collect { item ->
-                if (item != null) {
-                    onTrackLoaded()
-                }
-            }
-        }
-    }
 
     fun start() {
         startHardwarePolling()
@@ -308,7 +303,7 @@ val client = createHttpClient()
         
         // 🎼 SET UP ENGINE CALLBACKS
         audioEngine.onTrackEnded = {
-            viewModelScope.launch {
+            scope.launch {
                 when (repeatMode.value) {
                     RepeatMode.ONE -> {
                         val current = currentMediaItem.value
@@ -332,6 +327,22 @@ val client = createHttpClient()
         
         audioEngine.onTrackChanged = {
             onTrackLoaded()
+        }
+
+        // 🔄 Sync Playback State
+        scope.launch {
+            while(true) {
+                val actualPlaying = audioEngine.isPlaying()
+                if (isPlaying.value != actualPlaying) {
+                    isPlaying.value = actualPlaying
+                }
+                
+                if (actualPlaying) {
+                    currentPosition.longValue = audioEngine.getCurrentPosition()
+                    currentDuration.value = audioEngine.getDuration().coerceAtLeast(1L)
+                }
+                delay(500)
+            }
         }
         
         observeScanner()
@@ -511,11 +522,6 @@ val client = createHttpClient()
     internal fun cancelSleepTimerJob() {
         sleepTimerJob?.cancel()
     }
-    internal val scanFolders = mutableStateListOf<String>()
-    internal val currentStep = mutableIntStateOf(0)
-    internal val isSequencerActive = mutableStateOf(false)
-    internal val drumTutorials = listOf(DrumTutorial("Basic Rock"), DrumTutorial("Trap Foundations"))
-    internal val selectedTutorial = mutableStateOf<DrumTutorial?>(null)
     internal fun quantizeRecordedBeats() {}
     val isPlaylistPickerShown = mutableStateOf(false)
     val showStemSplitter = mutableStateOf(false)
@@ -592,6 +598,30 @@ val client = createHttpClient()
     )
 
     fun addStreamUrl(url: String, type: org.audiocular.peq.app.data.MediaType) {}
+
+    init {
+        scope.launch {
+            snapshotFlow { masterVolume.value }
+                .distinctUntilChanged()
+                .collect { 
+                    audioEngine.setVolume(it)
+                }
+        }
+        
+        observeScanner()
+        observeMetronome()
+        
+        // 🚀 Automatic Metadata & Lyric Fetching
+        scope.launch {
+            snapshotFlow { currentMediaItem.value }.collect { item ->
+                if (item != null) {
+                    onTrackLoaded()
+                }
+            }
+        }
+
+        start()
+    }
 }
 
 
