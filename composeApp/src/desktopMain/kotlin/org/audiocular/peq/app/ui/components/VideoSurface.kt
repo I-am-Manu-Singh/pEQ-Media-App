@@ -1,48 +1,80 @@
 package org.audiocular.peq.app.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Movie
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.audiocular.peq.app.LocalAppViewModel
 import org.audiocular.peq.app.audio.DesktopAudioEngine
-import org.audiocular.peq.app.ui.viewmodel.AppViewModel
+import java.awt.BorderLayout
+import javax.swing.JPanel
 
 @Composable
 actual fun VideoSurface(
     modifier: Modifier,
     contentScale: ContentScale
 ) {
-    val viewModel = LocalAppViewModel.current
-    val engine = viewModel.audioEngine as? DesktopAudioEngine ?: return
-    val bitmap by engine.videoBitmap
 
-    Box(
-        modifier = modifier.background(Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
-        bitmap?.let {
-            androidx.compose.foundation.Image(
-                bitmap = it,
-                contentDescription = "Video Surface",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = contentScale
+    val viewModel =
+        LocalAppViewModel.current
+
+    val engine =
+        viewModel.audioEngine
+            as? DesktopAudioEngine
+            ?: return
+
+    val component = remember {
+
+        println(
+            "pEQControl: REMEMBER VIDEO COMPONENT"
+        )
+
+        engine.getVideoComponent()
+    }
+
+    val videoPanel = remember {
+
+        JPanel(BorderLayout()).apply {
+
+            isOpaque = true
+
+            background =
+                java.awt.Color.BLACK
+
+            add(
+                component,
+                BorderLayout.CENTER
             )
-        } ?: run {
-            // Placeholder when no video is playing or frame is not ready
-            Icon(
-                imageVector = Icons.Default.Movie,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = Color.White.copy(alpha = 0.2f)
+
+            println(
+                "pEQControl: SWING VIDEO SURFACE MOUNTED"
             )
         }
     }
+
+    LaunchedEffect(Unit) {
+
+        delay(500)
+
+        videoPanel.revalidate()
+        videoPanel.repaint()
+
+        component.revalidate()
+        component.repaint()
+
+        engine.notifyVideoSurfaceReady()
+    }
+
+    SwingPanel(
+
+    modifier = modifier.fillMaxSize(),
+
+    factory = {
+
+        videoPanel
+    }
+)
 }

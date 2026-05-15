@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.Dispatchers
@@ -28,67 +29,118 @@ actual fun pEQImage(
     alpha: Float,
     mediaType: MediaType?
 ) {
-    var imageBitmap by remember(data) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var isLoading by remember(data) { mutableStateOf(data != null) }
 
-    LaunchedEffect(data) {
-        if (data == null) {
-            isLoading = false
-            imageBitmap = null
-            return@LaunchedEffect
-        }
-        
-        isLoading = true
-        withContext(Dispatchers.IO) {
-            try {
-                val cleanPath = data.replace("file://", "")
-                val file = File(cleanPath)
-                
-                val bitmap = if (data.startsWith("http")) {
-                    ImageIO.read(URL(data))?.toComposeImageBitmap()
-                } else if (file.exists()) {
-                    ImageIO.read(file)?.toComposeImageBitmap()
-                } else {
-                    // Fallback sidecar
-                    val parent = file.parentFile
-                    val sidecar = parent?.listFiles()?.find { f ->
-                        val name = f.nameWithoutExtension.lowercase()
-                        name in listOf("cover", "folder", "album", "artwork")
-                    }
-                    sidecar?.let { ImageIO.read(it)?.toComposeImageBitmap() }
-                }
-                imageBitmap = bitmap
-            } catch (e: Exception) {
-                // Silent fail for images
-            } finally {
-                isLoading = false
-            }
-        }
+    var imageBitmap by remember(data) {
+        mutableStateOf<ImageBitmap?>(null)
     }
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        imageBitmap?.let {
+    var isLoading by remember(data) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(data) {
+
+        if (data.isNullOrBlank()) {
+
+            imageBitmap = null
+            isLoading = false
+
+            return@LaunchedEffect
+        }
+
+        isLoading = true
+
+        imageBitmap = withContext(Dispatchers.IO) {
+
+            try {
+
+                val cleaned =
+                    data.replace("file://", "")
+
+                /*
+                 * REMOTE IMAGE
+                 */
+                if (data.startsWith("http")) {
+
+                    return@withContext ImageIO
+                        .read(URL(data))
+                        ?.toComposeImageBitmap()
+                }
+
+                val file = File(cleaned)
+
+                /*
+                 * DIRECT IMAGE
+                 */
+                if (
+                    file.exists() &&
+                    file.isFile
+                ) {
+
+                    try {
+
+                        ImageIO.read(file)
+                            ?.toComposeImageBitmap()
+
+                    } catch (_: Exception) {
+
+                        null
+                    }
+
+                } else {
+
+                    null
+                }
+
+            } catch (e: Exception) {
+
+                println(
+                    "pEQControl: Thumbnail load failed -> ${e.message}"
+                )
+
+                null
+            }
+        }
+
+        isLoading = false
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+
+        val bitmap = imageBitmap
+
+        if (bitmap != null) {
+
             Image(
-                bitmap = it,
+                bitmap = bitmap,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = contentScale,
                 alpha = alpha
             )
-        } ?: run {
-            if (!isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (mediaType == MediaType.VIDEO) Icons.Default.VideoLibrary else Icons.Default.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                        modifier = Modifier.fillMaxSize(0.4f)
-                    )
-                }
-            }
+
+        } else if (!isLoading) {
+
+            Icon(
+                imageVector =
+                    if (mediaType == MediaType.VIDEO) {
+                        Icons.Default.VideoLibrary
+                    } else {
+                        Icons.Default.MusicNote
+                    },
+
+                contentDescription = null,
+
+                tint = MaterialTheme
+                    .colorScheme
+                    .primary
+                    .copy(alpha = 0.25f),
+
+                modifier = Modifier.fillMaxSize(0.35f)
+            )
         }
     }
 }

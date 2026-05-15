@@ -1,8 +1,11 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
+
     alias(libs.plugins.kotlinMultiplatform)
+
     alias(libs.plugins.androidApplication)
+
     alias(libs.plugins.jetbrainsCompose)
 
     kotlin("plugin.serialization") version "1.9.22"
@@ -10,11 +13,14 @@ plugins {
 
 kotlin {
 
+    jvmToolchain(17)
+
     androidTarget {
 
         compilations.all {
 
             kotlinOptions {
+
                 jvmTarget = "17"
             }
         }
@@ -23,14 +29,19 @@ kotlin {
     jvm("desktop")
 
     listOf(
+
         iosX64(),
+
         iosArm64(),
+
         iosSimulatorArm64()
+
     ).forEach { iosTarget ->
 
         iosTarget.binaries.framework {
 
             baseName = "ComposeApp"
+
             isStatic = true
         }
     }
@@ -44,8 +55,11 @@ kotlin {
                 implementation(kotlin("stdlib-common"))
 
                 implementation(compose.runtime)
+
                 implementation(compose.foundation)
+
                 implementation(compose.material3)
+
                 implementation(compose.ui)
 
                 implementation(compose.materialIconsExtended)
@@ -56,17 +70,29 @@ kotlin {
 
                 implementation(libs.kamel.image)
 
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+                implementation(
+                    "org.jetbrains.kotlinx:kotlinx-datetime:0.6.0"
+                )
 
-                implementation(libs.kotlinx.coroutines.core)
+                implementation(
+                    libs.kotlinx.coroutines.core
+                )
 
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+                implementation(
+                    "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2"
+                )
 
-                implementation(libs.ktor.client.core)
+                implementation(
+                    libs.ktor.client.core
+                )
 
-                implementation(libs.ktor.client.content.negotiation)
+                implementation(
+                    libs.ktor.client.content.negotiation
+                )
 
-                implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.8")
+                implementation(
+                    "io.ktor:ktor-serialization-kotlinx-json:2.3.8"
+                )
             }
         }
 
@@ -74,40 +100,81 @@ kotlin {
 
             dependencies {
 
-                implementation(libs.androidx.core.ktx)
+                implementation(
+                    libs.androidx.core.ktx
+                )
 
-                implementation(libs.androidx.activity.compose)
+                implementation(
+                    libs.androidx.activity.compose
+                )
 
-                implementation(libs.media3.exoplayer)
-                implementation(libs.media3.session)
-                implementation(libs.media3.ui)
-                implementation(libs.media3.cast)
+                implementation(
+                    libs.media3.exoplayer
+                )
 
-                implementation(libs.androidx.biometric)
+                implementation(
+                    libs.media3.session
+                )
 
-                implementation(libs.androidx.palette)
+                implementation(
+                    libs.media3.ui
+                )
 
-                implementation(libs.androidx.splashscreen)
+                implementation(
+                    libs.media3.cast
+                )
 
-                implementation("androidx.palette:palette-ktx:1.0.0")
+                implementation(
+                    libs.androidx.biometric
+                )
 
-                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
+                implementation(
+                    libs.androidx.palette
+                )
 
+                implementation(
+                    libs.androidx.splashscreen
+                )
 
-                implementation("androidx.work:work-runtime-ktx:2.9.0")
+                implementation(
+                    "androidx.palette:palette-ktx:1.0.0"
+                )
 
-                implementation("com.github.yausername.youtubedl-android:library:0.14.0")
+                implementation(
+                    "com.microsoft.onnxruntime:onnxruntime-android:1.17.1"
+                )
 
-                implementation("com.github.yausername.youtubedl-android:ffmpeg:0.14.0")
+                implementation(
+                    "androidx.work:work-runtime-ktx:2.9.0"
+                )
 
-                implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
+                implementation(
+                    "com.github.yausername.youtubedl-android:library:0.14.0"
+                )
 
-                implementation("androidx.mediarouter:mediarouter:1.7.0")
+                implementation(
+                    "com.github.yausername.youtubedl-android:ffmpeg:0.14.0"
+                )
 
-                implementation("io.ktor:ktor-client-okhttp:2.3.8")
-                
-                implementation(libs.glance.appwidget)
-                implementation(libs.glance.material3)
+                implementation(
+                    "com.google.android.gms:play-services-cast-framework:21.4.0"
+                )
+
+                implementation(
+                    "androidx.mediarouter:mediarouter:1.7.0"
+                )
+
+                implementation(
+                    "io.ktor:ktor-client-okhttp:2.3.8"
+                )
+
+                implementation(
+                    libs.glance.appwidget
+                )
+
+                implementation(
+                    libs.glance.material3
+                )
             }
         }
 
@@ -115,15 +182,23 @@ kotlin {
 
             dependencies {
 
-                implementation(compose.desktop.currentOs)
+                implementation(
+                    compose.desktop.currentOs
+                )
 
-                implementation(libs.kotlinx.coroutines.swing)
+                implementation(
+                    libs.kotlinx.coroutines.swing
+                )
 
-                implementation(libs.ktor.client.cio)
+                implementation(
+                    libs.ktor.client.cio
+                )
 
-                // =========================
-                // JavaFX
-                // =========================
+                /*
+                 * =========================
+                 * JAVAFX
+                 * =========================
+                 */
 
                 val javafxVersion = "21.0.2"
 
@@ -132,42 +207,67 @@ kotlin {
 
                         System.getProperty("os.name")
                             .lowercase()
-                            .contains("mac") &&
+                            .contains("mac")
+                                &&
                                 System.getProperty("os.arch")
                                     .contains("aarch64") -> {
+
                             "mac-aarch64"
                         }
 
                         System.getProperty("os.name")
                             .lowercase()
                             .contains("mac") -> {
+
                             "mac"
                         }
 
                         System.getProperty("os.name")
                             .lowercase()
                             .contains("win") -> {
+
                             "win"
                         }
 
                         else -> {
+
                             "linux"
                         }
                     }
 
-                implementation("org.openjfx:javafx-base:$javafxVersion:$platform")
+                implementation(
+                    "org.openjfx:javafx-base:$javafxVersion:$platform"
+                )
 
-                implementation("org.openjfx:javafx-graphics:$javafxVersion:$platform")
+                implementation(
+                    "org.openjfx:javafx-graphics:$javafxVersion:$platform"
+                )
 
-                implementation("org.openjfx:javafx-controls:$javafxVersion:$platform")
+                implementation(
+                    "org.openjfx:javafx-controls:$javafxVersion:$platform"
+                )
 
+                /*
+                 * =========================
+                 * VLCJ
+                 * =========================
+                 */
 
-                // =========================
-                // FFmpeg / JavaCV
-                // =========================
-                implementation("uk.co.caprica:vlcj:4.8.3")
-                implementation("net.java.dev.jna:jna:5.14.0")
-                implementation("net.java.dev.jna:jna-platform:5.14.0")
+                implementation(
+                    "uk.co.caprica:vlcj:4.8.3"
+                )
+
+                implementation(
+                    "uk.co.caprica:vlcj-natives:4.8.3"
+                )
+
+                implementation(
+                    "net.java.dev.jna:jna:5.14.0"
+                )
+
+                implementation(
+                    "net.java.dev.jna:jna-platform:5.14.0"
+                )
             }
         }
 
@@ -189,10 +289,10 @@ kotlin {
 
             dependencies {
 
-                implementation(libs.ktor.client.darwin)
-
+                implementation(
+                    libs.ktor.client.darwin
+                )
             }
-
         }
     }
 }
@@ -233,7 +333,8 @@ android {
 
         resources {
 
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes +=
+                "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
@@ -247,14 +348,18 @@ android {
 
     compileOptions {
 
-        sourceCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility =
+            JavaVersion.VERSION_17
 
-        targetCompatibility = JavaVersion.VERSION_17
+        targetCompatibility =
+            JavaVersion.VERSION_17
     }
 
     dependencies {
 
-        debugImplementation(compose.uiTooling)
+        debugImplementation(
+            compose.uiTooling
+        )
     }
 }
 
@@ -262,24 +367,92 @@ compose.desktop {
 
     application {
 
-        mainClass = "org.audiocular.peq.app.MainKt"
+        mainClass =
+            "org.audiocular.peq.app.MainKt"
 
-        jvmArgs += listOf(
-                "-Djna.library.path=${projectDir}/native/vlc/lib",
-                "-Dvlcj.plugin.path=${projectDir}/native/vlc/plugins"
-            )
+        /*
+         * Disable Proguard
+         */
+
+        buildTypes.release.proguard {
+
+            isEnabled.set(false)
+        }
+
+        /*
+         * IMPORTANT
+         *
+         * DO NOT ADD:
+         *
+         * -Djna.library.path
+         * -Djava.library.path
+         * -Dvlcj.plugin.path
+         *
+         * These are now set dynamically
+         * inside DesktopAudioEngine.
+         *
+         * Humans keep hardcoding paths,
+         * then wonder why packaging breaks.
+         */
 
         nativeDistributions {
 
+            modules(
+
+                "java.base",
+
+                "java.desktop",
+
+                "java.logging",
+
+                "java.sql",
+
+                "jdk.unsupported"
+            )
+
             targetFormats(
+
                 TargetFormat.Dmg,
+
                 TargetFormat.Msi,
+
                 TargetFormat.Deb
             )
 
-            packageName = "pEQ Neural Workstation"
 
-            packageVersion = "1.0.0"
+    jvmArgs(
+
+    "-Djna.library.path=/Users/manpreet/Desktop/AndroidStudioProjects/pEQ-App/composeApp/src/desktopMain/resources/vlc/lib",
+
+    "-DVLC_PLUGIN_PATH=/Users/manpreet/Desktop/AndroidStudioProjects/pEQ-App/composeApp/src/desktopMain/resources/vlc/plugins",
+
+    "-Djava.awt.headless=false",
+
+    "-Dapple.awt.transparentTitleBar=true"
+)
+            packageName =
+                "pEQNeuralWorkstation"
+
+            packageVersion =
+                "1.0.0"
+
+            description =
+                "AI Powered Neural Media Workstation"
+
+            vendor =
+                "pEQ Neural Team"
+
+            macOS {
+
+                bundleID =
+                    "org.audiocular.peq.app"
+
+                dockName =
+                    "pEQ"
+
+                minimumSystemVersion =
+                    "12.0"
+            }
         }
     }
 }

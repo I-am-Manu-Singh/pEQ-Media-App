@@ -51,45 +51,154 @@ fun AppViewModel.handleCapturedStream(url: String) {
     }
 }
 
-fun AppViewModel.fetchLyrics(autoOpenEditor: Boolean = true) {
-    val item = currentMediaItem.value ?: return
-    
-    scope.launch {
+
+private var lyricsFetchJob: Job? = null
+
+fun AppViewModel.fetchLyrics(
+    autoOpenEditor: Boolean = true
+) {
+
+    val item =
+        currentMediaItem.value ?: return
+
+    /*
+     * SKIP VIDEO FILES
+     */
+    if (item.type == MediaType.VIDEO) {
+
+        println(
+            "pEQControl: [LYRICS] Video detected -> skipping"
+        )
+
+        return
+    }
+
+    /*
+     * UNIQUE REQUEST KEY
+     */
+    val requestKey =
+        "${item.artist}_${item.title}"
+
+    /*
+     * PREVENT DUPLICATE FETCHES
+     */
+    if (
+        lastLyricsRequest == requestKey &&
+        syncedLyrics.isNotEmpty()
+    ) {
+
+        println(
+            "pEQControl: [LYRICS] Already fetched"
+        )
+
+        return
+    }
+
+    /*
+     * CANCEL OLD REQUEST
+     */
+    lyricsFetchJob?.cancel()
+
+    lastLyricsRequest = requestKey
+
+    lyricsFetchJob = scope.launch {
+
         activeJob.value = SplitJob(
             id = "LYRICS_${Clock.System.now().toEpochMilliseconds()}",
             name = "Neural Lyrics Sync",
             progress = 0.3f,
             status = "SEARCHING REPOSITORY"
         )
-        
+
         try {
-            val results = lyricsRepository.fetchLyrics(
-                artist = item.artist,
-                title = item.title,
-                durationMs = if (item.durationMs > 0) item.durationMs else null
-            )
-            
+
+            val results =
+                lyricsRepository.fetchLyrics(
+                    artist = item.artist,
+                    title = item.title,
+                    durationMs =
+                        if (item.durationMs > 0) {
+                            item.durationMs
+                        } else {
+                            null
+                        }
+                )
+
             if (!results.isNullOrEmpty()) {
+
                 syncedLyrics.clear()
+
                 syncedLyrics.addAll(results)
-                showToast("Neural sync established")
-                
-                currentMediaItem.value?.let { current ->
-                    val updated = current.copy(lyrics = results.joinToString("\n") { line -> "[${formatLrcTime(line.timestampMs)}] ${line.text}" })
-                    currentMediaItem.value = updated
-                    _mediaLibrary.value = _mediaLibrary.value.map { if (it.path == updated.path) updated else it }
-                }
-                
-                activeJob.value = activeJob.value?.copy(progress = 1.0f, status = "SYNC COMPLETE")
+
+                showToast(
+                    "Neural sync established"
+                )
+
+                currentMediaItem.value
+                    ?.let { current ->
+
+                        val updated =
+                            current.copy(
+
+                                lyrics =
+                                    results.joinToString("\n") { line ->
+
+                                        "[${formatLrcTime(line.timestampMs)}] ${line.text}"
+                                    }
+                            )
+
+                        currentMediaItem.value =
+                            updated
+
+                        _mediaLibrary.value =
+                            _mediaLibrary.value.map {
+
+                                if (it.path == updated.path) {
+                                    updated
+                                } else {
+                                    it
+                                }
+                            }
+                    }
+
+                activeJob.value =
+                    activeJob.value?.copy(
+                        progress = 1.0f,
+                        status = "SYNC COMPLETE"
+                    )
+
             } else {
-                activeJob.value = activeJob.value?.copy(status = "NO MATCH FOUND", progress = 1.0f)
+
+                activeJob.value =
+                    activeJob.value?.copy(
+                        status = "NO MATCH FOUND",
+                        progress = 1.0f
+                    )
             }
+
         } catch (e: Exception) {
-            activeJob.value = activeJob.value?.copy(status = "FETCH FAILED", progress = 1.0f)
+
+            println(
+                "pEQControl: [LYRICS] Fetch failed -> ${e.message}"
+            )
+
+            activeJob.value =
+                activeJob.value?.copy(
+                    status = "FETCH FAILED",
+                    progress = 1.0f
+                )
+
         } finally {
+
             delay(1200)
+
             activeJob.value = null
-            if (autoOpenEditor && syncedLyrics.isNotEmpty()) {
+
+            if (
+                autoOpenEditor &&
+                syncedLyrics.isNotEmpty()
+            ) {
+
                 isLyricsVisible.value = true
             }
         }
@@ -160,11 +269,44 @@ fun AppViewModel.parseLrcInternal(content: String): List<SyncedLine> {
     }
     return lines
 }
+private var lastLyricsRequest: String? = null
+
 fun AppViewModel.fetchLyricsNative() {
+
+    val item =
+        currentMediaItem.value ?: return
+
+    /*
+     * SKIP VIDEO FILES
+     */
+    if (item.type == MediaType.VIDEO) {
+
+        println(
+            "pEQControl: [LYRICS] Video detected -> skipping"
+        )
+
+        return
+    }
+
+    val requestKey =
+        "${item.artist}_${item.title}"
+
+    /*
+     * PREVENT DUPLICATE REQUESTS
+     */
+    if (lastLyricsRequest == requestKey) {
+
+        println(
+            "pEQControl: [LYRICS] Duplicate fetch prevented"
+        )
+
+        return
+    }
+
+    lastLyricsRequest = requestKey
+
     fetchLyrics()
 }
-
-
 
 fun AppViewModel.importChapterFile(path: String) {
     scope.launch {

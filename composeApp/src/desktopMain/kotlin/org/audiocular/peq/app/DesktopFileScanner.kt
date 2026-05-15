@@ -6,83 +6,318 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.audiocular.peq.app.data.*
+import uk.co.caprica.vlcj.factory.MediaPlayerFactory
+import uk.co.caprica.vlcj.media.Meta
 import java.io.File
-import java.io.RandomAccessFile
-import java.util.UUID
 
 class DesktopFileScanner : pEQFileScanner {
-    private val scope = CoroutineScope(Dispatchers.IO)
-    
-    private val factory = uk.co.caprica.vlcj.factory.MediaPlayerFactory()
-    
-    private val _mediaFiles = MutableStateFlow<List<VideoFile>>(emptyList())
-    override val mediaFiles: StateFlow<List<VideoFile>> = _mediaFiles
 
-    private val _audioFiles = MutableStateFlow<List<AudioFile>>(emptyList())
-    override val audioFiles: StateFlow<List<AudioFile>> = _audioFiles
+    private val scope =
+        CoroutineScope(Dispatchers.IO)
 
-    private val _scanProgress = MutableStateFlow(0f)
-    override val scanProgress: StateFlow<Float> = _scanProgress
+    private val factory by lazy {
 
-    private val _scanStatus = MutableStateFlow("Idle")
-    override val scanStatus: StateFlow<String> = _scanStatus
+        MediaPlayerFactory(
 
-    private var included = emptyList<String>()
+            "--quiet",
 
-    override fun scan(includePaths: List<String>, excludePaths: List<String>) {
+            "--no-video-title-show",
+
+            "--avcodec-hw=none"
+        )
+    }
+
+    /*
+     * STATE
+     */
+    private val _mediaFiles =
+        MutableStateFlow<List<VideoFile>>(emptyList())
+
+    override val mediaFiles:
+            StateFlow<List<VideoFile>> =
+        _mediaFiles
+
+    private val _audioFiles =
+        MutableStateFlow<List<AudioFile>>(emptyList())
+
+    override val audioFiles:
+            StateFlow<List<AudioFile>> =
+        _audioFiles
+
+    private val _scanProgress =
+        MutableStateFlow(0f)
+
+    override val scanProgress:
+            StateFlow<Float> =
+        _scanProgress
+
+    private val _scanStatus =
+        MutableStateFlow("Idle")
+
+    override val scanStatus:
+            StateFlow<String> =
+        _scanStatus
+
+    private var included =
+        emptyList<String>()
+
+    /*
+     * CLEAN METADATA
+     */
+    private fun cleanMeta(
+        value: String?
+    ): String? {
+
+        val cleaned =
+            value
+                ?.trim()
+                ?.replace("\u0000", "")
+                ?.replace("_", " ")
+
+        return cleaned?.takeIf {
+
+            it.isNotBlank() &&
+            it.lowercase() != "unknown"
+        }
+    }
+
+    /*
+     * CLEAN FILENAME
+     */
+    private fun cleanFilename(
+        file: File
+    ): String {
+
+        return file.nameWithoutExtension
+            .replace("_", " ")
+            .replace(".", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    /*
+     * SCAN
+     */
+    override fun scan(
+        includePaths: List<String>,
+        excludePaths: List<String>
+    ) {
+
         included = includePaths
+
         scope.launch {
-            _scanStatus.value = "Scanning Archive..."
-            val videos = mutableListOf<VideoFile>()
-            val audios = mutableListOf<AudioFile>()
-            
+
+            _scanStatus.value =
+                "Scanning Archive..."
+
+            val videos =
+                mutableListOf<VideoFile>()
+
+            val audios =
+                mutableListOf<AudioFile>()
+
+            val supportedExtensions =
+                setOf(
+
+                    "mp3",
+                    "wav",
+                    "flac",
+                    "m4a",
+                    "ogg",
+                    "aac",
+
+                    "mp4",
+                    "mkv",
+                    "mov",
+                    "avi",
+                    "webm",
+                    "3gp"
+                )
+
+            val excluded =
+                excludePaths.map {
+                    File(it).absolutePath
+                }
+
+            val allFiles =
+                ArrayList<File>(5000)
+
             includePaths.forEach { path ->
-                val target = File(path)
-                if (target.exists()) {
-                    val filesToScan = if (target.isDirectory) {
-                        target.walkTopDown().filter { it.isFile }.toList()
-                    } else {
-                        listOf(target)
-                    }
-                    
-                    val total = filesToScan.size.toFloat()
-                    var processed = 0
-                    
-                    filesToScan.forEach { file ->
-                        processed++
-                        if (total > 0) _scanProgress.value = processed / total
-                        
-                        val extension = file.extension.lowercase()
-                        if (!listOf("mp3", "wav", "flac", "m4a", "ogg", "aac", "mp4", "mkv", "mov", "avi", "webm", "3gp").contains(extension)) return@forEach
-                        
-                        // Use VLC to probe metadata
-                        val media = factory.media().newMedia(file.absolutePath)
-                        val duration = media.info()?.duration() ?: 0L
-                        
-                        // We need to parse metadata
-                        val meta = media.meta()
-                        val title = meta?.get(uk.co.caprica.vlcj.media.Meta.TITLE) ?: file.nameWithoutExtension
-                        val artist = meta?.get(uk.co.caprica.vlcj.media.Meta.ARTIST) ?: file.parentFile?.name ?: "Unknown Artist"
-                        val album = meta?.get(uk.co.caprica.vlcj.media.Meta.ALBUM) ?: file.parentFile?.name ?: "Unknown Album"
-                        
-                        val thumbnailPath = findThumbnail(file) ?: extractEmbeddedArt(file)
-                        
-                        when (extension) {
-                            "mp4", "mkv", "mov", "avi", "webm", "3gp" -> {
-                                videos.add(VideoFile(
+
+                val root =
+                    File(path)
+
+                if (!root.exists()) {
+                    return@forEach
+                }
+
+                if (root.isFile) {
+
+                    allFiles.add(root)
+
+                } else {
+
+                    root.walkTopDown()
+                        .onEnter { dir ->
+
+                            excluded.none {
+
+                                dir.absolutePath
+                                    .startsWith(it)
+                            }
+                        }
+                        .filter { file ->
+
+                            file.isFile &&
+                            file.extension.lowercase() in supportedExtensions
+                        }
+                        .forEach {
+
+                            allFiles.add(it)
+                        }
+                }
+            }
+
+            val total =
+                allFiles.size
+                    .coerceAtLeast(1)
+
+            allFiles.forEachIndexed { index, file ->
+
+                try {
+
+                    _scanProgress.value =
+                        (index + 1).toFloat() /
+                        total.toFloat()
+
+                    _scanStatus.value =
+                        "Scanning ${file.name}"
+
+                    val extension =
+                        file.extension.lowercase()
+
+                    val media =
+                        factory.media()
+                            .newMedia(
+                                file.absolutePath
+                            )
+
+                    try {
+
+                        /*
+                         * SAFE PARSE
+                         */
+                        try {
+
+                            media.parsing()
+                                .parse()
+
+                            Thread.sleep(100)
+
+                        } catch (_: Exception) {
+
+                            println(
+                                "pEQControl: Metadata timeout -> ${file.name}"
+                            )
+                        }
+
+                        val meta =
+                            media.meta()
+
+                        val duration =
+                            media.info()
+                                ?.duration()
+                                ?: 0L
+
+                        val parsedName =
+                            cleanFilename(file)
+
+                        /*
+                         * TITLE
+                         */
+                        val title =
+                            cleanMeta(
+                                meta?.get(Meta.TITLE)
+                            )
+                                ?: parsedName
+
+                        /*
+                         * ARTIST
+                         */
+                        val filenameArtist =
+                            parsedName
+                                .substringBefore("-")
+                                .trim()
+                                .takeIf {
+                                    parsedName.contains("-")
+                                }
+
+                        val artist =
+                            cleanMeta(
+                                meta?.get(Meta.ARTIST)
+                            )
+                                ?: filenameArtist
+                                ?: "Unknown Artist"
+
+                        /*
+                         * ALBUM
+                         */
+                        val album =
+                            cleanMeta(
+                                meta?.get(Meta.ALBUM)
+                            )
+                                ?: file.parentFile
+                                    ?.name
+                                    ?.replace("_", " ")
+                                    ?.replace(".", " ")
+                                ?: "Unknown Album"
+
+                        /*
+                         * THUMBNAIL
+                         */
+                        val thumbnail =
+                            findThumbnail(file)
+                                ?.let {
+                                    "file://$it"
+                                }
+
+                        /*
+                         * VIDEO
+                         */
+                        if (
+                            extension in setOf(
+                                "mp4",
+                                "mkv",
+                                "mov",
+                                "avi",
+                                "webm",
+                                "3gp"
+                            )
+                        ) {
+
+                            videos.add(
+
+                                VideoFile(
                                     id = "v_${file.absolutePath.hashCode()}",
                                     name = file.name,
                                     title = title,
                                     path = file.absolutePath,
                                     duration = duration,
                                     sizeBytes = file.length(),
-                                    resolution = "HD", // Placeholder
+                                    resolution = extractResolution(media),
                                     dateModified = file.lastModified(),
-                                    thumbnail = thumbnailPath
-                                ))
-                            }
-                            else -> {
-                                audios.add(AudioFile(
+                                    thumbnail = thumbnail
+                                )
+                            )
+
+                        } else {
+
+                            /*
+                             * AUDIO
+                             */
+                            audios.add(
+
+                                AudioFile(
                                     id = "a_${file.absolutePath.hashCode()}",
                                     name = file.name,
                                     title = title,
@@ -93,84 +328,300 @@ class DesktopFileScanner : pEQFileScanner {
                                     artist = artist,
                                     album = album,
                                     format = extension.uppercase(),
-                                    thumbnail = thumbnailPath
-                                ))
-                            }
+                                    thumbnail = thumbnail
+                                )
+                            )
                         }
-                        media.release()
+
+                    } catch (e: Exception) {
+
+                        println(
+                            "pEQControl: Metadata parse failed -> ${file.name}"
+                        )
+
+                        e.printStackTrace()
                     }
+
+                } catch (e: Exception) {
+
+                    println(
+                        "pEQControl: [SCAN] Failed -> ${file.absolutePath}"
+                    )
+
+                    e.printStackTrace()
                 }
             }
-            
-            _mediaFiles.value = videos
-            _audioFiles.value = audios
-            _scanStatus.value = "Scan Complete"
+
+            /*
+             * SORT
+             */
+            _audioFiles.value =
+                audios.sortedBy {
+                    it.title
+                        .orEmpty()
+                        .lowercase()
+                }
+
+            _mediaFiles.value =
+                videos.sortedBy {
+                    it.title
+                        .orEmpty()
+                        .lowercase()
+                }
+
             _scanProgress.value = 1f
+
+            _scanStatus.value =
+                "Scan Complete (${audios.size + videos.size} files)"
         }
     }
 
-    private fun extractEmbeddedArt(file: File): String? {
-        // VLCJ doesn't easily extract art to a file without playing, 
-        // but we can look for sidecar files as a fallback in findThumbnail.
-        return null 
+    /*
+     * RESOLUTION
+     */
+    private fun extractResolution(
+        media: uk.co.caprica.vlcj.media.Media
+    ): String {
+
+        return try {
+
+            val track =
+                media.info()
+                    ?.videoTracks()
+                    ?.firstOrNull()
+
+            val width =
+                track?.width() ?: 0
+
+            val height =
+                track?.height() ?: 0
+
+            if (
+                width > 0 &&
+                height > 0
+            ) {
+
+                "${width}x$height"
+
+            } else {
+
+                "Unknown"
+            }
+
+        } catch (_: Exception) {
+
+            "Unknown"
+        }
     }
 
-    private fun findThumbnail(mediaFile: File): String? {
-        val folder = mediaFile.parentFile ?: return null
-        val patterns = listOf("cover", "folder", "album", "artwork", "front")
-        val extensions = listOf("jpg", "jpeg", "png", "webp")
-        
-        // 1. Try to find an image with the same name as the media file
+    /*
+     * THUMBNAILS
+     */
+    private fun findThumbnail(
+        mediaFile: File
+    ): String? {
+
+        val folder =
+            mediaFile.parentFile
+                ?: return null
+
+        val extensions =
+            listOf(
+                "jpg",
+                "jpeg",
+                "png",
+                "webp"
+            )
+
+        /*
+         * SAME NAME
+         */
         extensions.forEach { ext ->
-            val img = File(folder, "${mediaFile.nameWithoutExtension}.$ext")
-            if (img.exists()) return img.absolutePath
+
+            val sameName =
+                File(
+                    folder,
+                    "${mediaFile.nameWithoutExtension}.$ext"
+                )
+
+            if (
+                sameName.exists() &&
+                sameName.isFile
+            ) {
+
+                return sameName.absolutePath
+            }
         }
-        
-        // 2. Try common folder patterns
-        folder.listFiles()?.forEach { file ->
-            if (file.isFile) {
-                val name = file.nameWithoutExtension.lowercase()
-                val ext = file.extension.lowercase()
-                if (name in patterns && ext in extensions) {
+
+        /*
+         * COMMON COVER NAMES
+         */
+        val patterns =
+            listOf(
+                "cover",
+                "folder",
+                "album",
+                "artwork",
+                "front",
+                "poster",
+                "thumb",
+                "thumbnail"
+            )
+
+        folder.listFiles()
+            ?.forEach { file ->
+
+                if (!file.isFile) {
+                    return@forEach
+                }
+
+                val name =
+                    file.nameWithoutExtension
+                        .lowercase()
+
+                val ext =
+                    file.extension
+                        .lowercase()
+
+                if (
+                    (ext in extensions) &&
+                    patterns.any {
+                        name.contains(it)
+                    }
+                ) {
+
                     return file.absolutePath
                 }
             }
-        }
-        
-        return null
+
+        /*
+         * FALLBACK FIRST IMAGE
+         */
+        return folder.listFiles()
+            ?.firstOrNull {
+
+                it.isFile &&
+                it.extension.lowercase() in extensions
+            }
+            ?.absolutePath
     }
 
-    override fun setExcludedFolders(folders: List<String>) {}
-    override fun setIncludedFolders(folders: List<String>) {
+    /*
+     * SETTINGS
+     */
+    override fun setExcludedFolders(
+        folders: List<String>
+    ) = Unit
+
+    override fun setIncludedFolders(
+        folders: List<String>
+    ) {
+
         included = folders
-        scan(folders, emptyList())
-    }
-    override fun scanNetworkDrives(host: String) {}
-    override fun refresh() {
-        scan(included, emptyList())
-    }
-    override fun renameFile(file: VideoFile, newName: String) {}
-    override fun renameAudioFile(file: AudioFile, newName: String) {}
-    override fun deleteFile(file: VideoFile) {
-        File(file.path).delete()
-        refresh()
-    }
-    override fun deleteAudioFile(file: AudioFile) {
-        File(file.path).delete()
-        refresh()
-    }
-    override fun shareFile(file: VideoFile) {}
-    override fun shareAudioFile(file: AudioFile) {}
-    override fun exportPlaylist(name: String, tracks: List<AudioFile>) {}
-    override fun readFileContent(path: String): String? {
-        return try { File(path).readText() } catch (e: Exception) { null }
+
+        scan(
+            folders,
+            emptyList()
+        )
     }
 
-    override fun listFiles(path: String): List<String> {
+    override fun scanNetworkDrives(
+        host: String
+    ) = Unit
+
+    override fun refresh() {
+
+        scan(
+            included,
+            emptyList()
+        )
+    }
+
+    /*
+     * FILE OPS
+     */
+    override fun renameFile(
+        file: VideoFile,
+        newName: String
+    ) = Unit
+
+    override fun renameAudioFile(
+        file: AudioFile,
+        newName: String
+    ) = Unit
+
+    override fun deleteFile(
+        file: VideoFile
+    ) {
+
+        File(file.path).delete()
+
+        refresh()
+    }
+
+    override fun deleteAudioFile(
+        file: AudioFile
+    ) {
+
+        File(file.path).delete()
+
+        refresh()
+    }
+
+    override fun shareFile(
+        file: VideoFile
+    ) = Unit
+
+    override fun shareAudioFile(
+        file: AudioFile
+    ) = Unit
+
+    override fun exportPlaylist(
+        name: String,
+        tracks: List<AudioFile>
+    ) = Unit
+
+    /*
+     * FILE ACCESS
+     */
+    override fun readFileContent(
+        path: String
+    ): String? {
+
         return try {
-            File(path).listFiles()?.map { it.absolutePath } ?: emptyList()
-        } catch (e: Exception) {
+
+            File(path).readText()
+
+        } catch (_: Exception) {
+
+            null
+        }
+    }
+
+    override fun listFiles(
+        path: String
+    ): List<String> {
+
+        return try {
+
+            File(path)
+                .listFiles()
+                ?.map {
+                    it.absolutePath
+                }
+                ?: emptyList()
+
+        } catch (_: Exception) {
+
             emptyList()
         }
+    }
+
+    /*
+     * RELEASE
+     */
+    fun release() {
+
+        factory.release()
     }
 }

@@ -1,8 +1,7 @@
-// LyricsRepository.kt
 package org.audiocular.peq.app.data.lyrics
 
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -20,50 +19,162 @@ class LyricsRepository {
         ignoreUnknownKeys = true
     }
 
-    private val client = createHttpClient().config {
-        install(HttpTimeout) {
-            requestTimeoutMillis = 15000
-            connectTimeoutMillis = 10000
-            socketTimeoutMillis = 15000
-        }
-        install(io.ktor.client.plugins.DefaultRequest) {
-            header(io.ktor.http.HttpHeaders.UserAgent, "pEQ-Workstation/1.0 (Desktop; Kotlin Multiplatform)")
-        }
-    }
+    private val client =
+        createHttpClient().config {
 
-    private val cache = mutableMapOf<String, List<SyncedLine>>()
+            install(HttpTimeout) {
+
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+                socketTimeoutMillis = 15000
+            }
+
+            install(DefaultRequest) {
+
+                header(
+                    io.ktor.http.HttpHeaders.UserAgent,
+                    "pEQ-Workstation/1.0"
+                )
+            }
+        }
+
+    /*
+     * MEMORY CACHE
+     */
+    private val cache =
+        mutableMapOf<String, List<SyncedLine>>()
 
     suspend fun fetchLyrics(
         artist: String?,
         title: String,
         durationMs: Long? = null
     ): List<SyncedLine>? {
-        println("pEQControl: [LYRICS_REPO] fetchLyrics entry: artist=$artist, title=$title")
 
-        val normalizedArtist = normalizeArtist(artist ?: "")
-        val normalizedTitle = normalizeTitle(title)
+        println(
+            "pEQControl: [LYRICS_REPO] fetchLyrics entry: artist=$artist, title=$title"
+        )
 
-        val cacheKey = "$normalizedArtist-$normalizedTitle"
+        /*
+         * SKIP VIDEO FILES
+         */
+        val lowerTitle =
+            title.lowercase()
 
+        if (
+            lowerTitle.endsWith(".mp4") ||
+            lowerTitle.endsWith(".mkv") ||
+            lowerTitle.endsWith(".avi") ||
+            lowerTitle.endsWith(".mov") ||
+            lowerTitle.endsWith(".webm") ||
+            lowerTitle.endsWith(".3gp")
+        ) {
+
+            println(
+                "pEQControl: [LYRICS_REPO] Skipping video file"
+            )
+
+            return null
+        }
+
+        /*
+         * CLEAN TITLE
+         */
+        val cleanedTitle =
+            title
+                .substringBeforeLast(".")
+                .replace(
+                    Regex(
+                        "(?i)\\b(official|video|audio|lyrics|instrumental|cover|guitar cover|live|remix|edit|4k|hd|hq)\\b"
+                    ),
+                    ""
+                )
+                .replace(
+                    Regex("\\(.*?\\)|\\[.*?\\]"),
+                    ""
+                )
+                .replace("_", " ")
+                .replace("-", " ")
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
+                .trim()
+
+        if (cleanedTitle.isBlank()) {
+
+            println(
+                "pEQControl: [LYRICS_REPO] Empty cleaned title"
+            )
+
+            return null
+        }
+
+        val normalizedArtist =
+            normalizeArtist(artist ?: "")
+
+        val normalizedTitle =
+            normalizeTitle(cleanedTitle)
+
+        val cacheKey =
+            "$normalizedArtist-$normalizedTitle"
+
+        /*
+         * CACHE HIT
+         */
         cache[cacheKey]?.let {
+
+            println(
+                "pEQControl: [LYRICS_REPO] Cache hit"
+            )
+
             return it
         }
 
-        val artistIsGeneric = normalizedArtist.isBlank() || normalizedArtist.contains("unknown", ignoreCase = true)
-        val titleIsGeneric = normalizedTitle.isBlank() || normalizedTitle.contains("unknown", ignoreCase = true)
+        val artistIsGeneric =
+            normalizedArtist.isBlank() ||
+            normalizedArtist.contains(
+                "unknown",
+                ignoreCase = true
+            )
 
-        val query = if (artistIsGeneric) {
-            normalizedTitle
-        } else {
-            "$normalizedArtist $normalizedTitle"
-        }.trim()
+        val titleIsGeneric =
+            normalizedTitle.isBlank() ||
+            normalizedTitle.contains(
+                "unknown",
+                ignoreCase = true
+            )
 
-        if (query.isBlank()) return null
+        if (titleIsGeneric) {
+
+            println(
+                "pEQControl: [LYRICS_REPO] Invalid normalized title"
+            )
+
+            return null
+        }
+
+        val query =
+            if (artistIsGeneric) {
+
+                normalizedTitle
+
+            } else {
+
+                "$normalizedArtist $normalizedTitle"
+            }.trim()
+
+        if (query.isBlank()) {
+            return null
+        }
 
         val url =
-            "https://lrclib.net/api/search?q=${query.encodeURLPathPart()}"
+            "https://lrclib.net/api/search?q=${
+                query.encodeURLPathPart()
+            }"
 
-        println("pEQControl: [LYRICS_REPO] Searching: $url")
+        println(
+            "pEQControl: [LYRICS_REPO] Searching: $url"
+        )
 
         return try {
 
@@ -71,9 +182,13 @@ class LyricsRepository {
                 client.get(url).body()
 
             val results =
-                json.decodeFromString<List<LrclibSearchResult>>(response)
+                json.decodeFromString<List<LrclibSearchResult>>(
+                    response
+                )
 
-            println("pEQControl: [LYRICS_REPO] Found ${results.size} matches")
+            println(
+                "pEQControl: [LYRICS_REPO] Found ${results.size} matches"
+            )
 
             if (results.isEmpty()) {
                 return null
@@ -81,13 +196,16 @@ class LyricsRepository {
 
             val best =
                 results.minByOrNull {
+
                     calculateScore(
                         localArtist = normalizedArtist,
                         localTitle = normalizedTitle,
                         apiArtist = normalizeArtist(it.artistName),
                         apiTitle = normalizeTitle(it.trackName),
                         localDuration = durationMs,
-                        apiDuration = it.duration?.toLong()?.times(1000L)
+                        apiDuration = it.duration
+                            ?.toLong()
+                            ?.times(1000L)
                     )
                 }
 
@@ -101,11 +219,17 @@ class LyricsRepository {
 
             val parsed =
                 if (best?.syncedLyrics != null) {
+
                     parseLrc(lyrics)
+
                 } else {
+
                     lyrics.lines()
-                        .filter { it.isNotBlank() }
+                        .filter {
+                            it.isNotBlank()
+                        }
                         .map {
+
                             SyncedLine(
                                 timestampMs = 0L,
                                 text = it
@@ -113,15 +237,24 @@ class LyricsRepository {
                         }
                 }
 
+            /*
+             * SAVE CACHE
+             */
             cache[cacheKey] = parsed
 
             parsed
 
         } catch (e: Exception) {
-            println("pEQControl: [LYRICS_REPO] Error: ${e.message}")
-            e.printStackTrace()
-            null
-        }
+
+    if (e.message?.contains("cancelled", true) != true) {
+
+        println(
+            "pEQControl: [LYRICS_REPO] Error: ${e.message}"
+        )
+    }
+
+    null
+}
     }
 
     private fun calculateScore(

@@ -290,15 +290,19 @@ fun pEQSplashScreen() {
             }
 
             Spacer(Modifier.height(18.dp))
-
            var loadingText by remember {
         mutableStateOf("Loading assets...")
 }
 
 LaunchedEffect(Unit) {
     delay(1000)
-    loadingText = "audio & video components..."
+    loadingText = "audio components..."
 }
+LaunchedEffect(Unit) {
+    delay(1000)
+    loadingText = "video components..."
+}
+
 LaunchedEffect(Unit) {
     delay(1000)
     loadingText = "neural engine..."

@@ -158,7 +158,24 @@ LaunchedEffect(item.path) {
     )
 }
 ){
-        VideoSurface(modifier = Modifier.fillMaxSize(), contentScale = contentScale)
+        // 
+        val stableVideoSurface = remember {
+
+    movableContentOf<ContentScale> { scale ->
+
+      
+
+            VideoSurface(
+                modifier = Modifier.fillMaxSize(),
+                contentScale = scale
+            )
+        
+    }
+}
+
+stableVideoSurface(contentScale)
+
+
       AnimatedVisibility(
     visible = controlsVisible || isLocked,
 

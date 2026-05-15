@@ -28,6 +28,10 @@ class SubtitleRepository(
 
     private val cache = mutableMapOf<String, List<SubtitleMatch>>()
 
+
+private val activeRequests =
+
+    mutableMapOf<String, List<SubtitleMatch>?>()
     suspend fun searchSubtitles(
         title: String,
         artist: String? = null,
