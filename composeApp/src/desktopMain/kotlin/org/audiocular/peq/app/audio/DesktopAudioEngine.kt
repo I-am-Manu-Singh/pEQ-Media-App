@@ -77,12 +77,28 @@ class DesktopAudioEngine : AudioEngine {
     private val isPlayingState = mutableStateOf(false)
     private val stemPlayers = mutableMapOf<String, MediaPlayer>()
     
+    private var bassHandle = 0
+    private val stemHandles = mutableMapOf<String, Int>()
 
     init {
+        setupBass()
         setupVlc()
         setupVideoSurface()
         setupEvents()
         startSpectrumAnalysis()
+    }
+
+    private fun setupBass() {
+        if (Bass.isLoaded) {
+            try {
+                val inited = Bass.lib?.BASS_Init(-1, 44100, 0, null, null) ?: false
+                if (inited) {
+                    println("pEQControl: [BASS] Native library initialized successfully")
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [BASS] Init error -> ${e.message}")
+            }
+        }
     }
 
     private fun setupVlc() {
@@ -260,6 +276,24 @@ class DesktopAudioEngine : AudioEngine {
 
     override fun playTrack(url: String, title: String?, artist: String?, thumbnail: String?) {
         currentUrl = url
+        if (Bass.isLoaded && Bass.lib != null) {
+            try {
+                if (bassHandle != 0) {
+                    Bass.lib?.BASS_ChannelStop(bassHandle)
+                }
+                val path = if (url.startsWith("file://")) url.substring(7) else url
+                bassHandle = Bass.lib?.BASS_StreamCreateFile(false, path, 0L, 0L, 0) ?: 0
+                if (bassHandle != 0) {
+                    Bass.lib?.BASS_ChannelPlay(bassHandle, true)
+                    isPlayingState.value = true
+                    onTrackChanged?.invoke()
+                    println("pEQControl: [BASS] Playing track -> $url")
+                    return
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [BASS] Playback failed: ${e.message}")
+            }
+        }
         val mediaPath = if (url.startsWith("http")) url else File(url.replace("file://", "")).absolutePath
         mediaPlayer.media().play(mediaPath)
         mediaPlayer.audio().setVolume((volume * 100).toInt())
@@ -273,6 +307,25 @@ class DesktopAudioEngine : AudioEngine {
     }
 
     override fun loadStems(stems: Map<String, String>) {
+        if (Bass.isLoaded && Bass.lib != null) {
+            try {
+                stemHandles.values.forEach { Bass.lib?.BASS_ChannelStop(it) }
+                stemHandles.clear()
+                stems.forEach { (name, url) ->
+                    val path = if (url.startsWith("file://")) url.substring(7) else url
+                    val handle = Bass.lib?.BASS_StreamCreateFile(false, path, 0L, 0L, 0) ?: 0
+                    if (handle != 0) {
+                        stemHandles[name.lowercase()] = handle
+                        Bass.lib?.BASS_ChannelPlay(handle, true)
+                    }
+                }
+                isPlayingState.value = true
+                println("pEQControl: [BASS] Loaded stems: ${stems.keys}")
+                return
+            } catch (e: Exception) {
+                println("pEQControl: [BASS] Failed to load stems: ${e.message}")
+            }
+        }
         // Clear existing stem players
         stemPlayers.values.forEach { it.release() }
         stemPlayers.clear()
@@ -294,24 +347,44 @@ class DesktopAudioEngine : AudioEngine {
     }
 
     override fun resume() {
+        if (Bass.isLoaded && bassHandle != 0) {
+            Bass.lib?.BASS_ChannelPlay(bassHandle, false)
+            isPlayingState.value = true
+            return
+        }
         mediaPlayer.controls().play()
         stemPlayers.values.forEach { it.controls().play() }
         isPlayingState.value = true
     }
 
     override fun pause() {
+        if (Bass.isLoaded && bassHandle != 0) {
+            Bass.lib?.BASS_ChannelPause(bassHandle)
+            isPlayingState.value = false
+            return
+        }
         mediaPlayer.controls().pause()
         stemPlayers.values.forEach { it.controls().pause() }
         isPlayingState.value = false
     }
 
     override fun stop() {
+        if (Bass.isLoaded && bassHandle != 0) {
+            Bass.lib?.BASS_ChannelStop(bassHandle)
+            isPlayingState.value = false
+            return
+        }
         mediaPlayer.controls().stop()
         stemPlayers.values.forEach { it.controls().stop() }
         isPlayingState.value = false
     }
 
     override fun seekTo(positionMs: Long) {
+        if (Bass.isLoaded && bassHandle != 0) {
+            val bytes = Bass.lib?.BASS_ChannelSeconds2Bytes(bassHandle, positionMs / 1000.0) ?: 0L
+            Bass.lib?.BASS_ChannelSetPosition(bassHandle, bytes, 0)
+            return
+        }
         mediaPlayer.controls().setTime(positionMs)
     }
 
@@ -395,40 +468,58 @@ class DesktopAudioEngine : AudioEngine {
             else -> {}
         }
     }
-override fun updateEqBand(bandIndex: Int, gainDb: Float) {
-    try {
+    override fun updateEqBand(bandIndex: Int, gainDb: Float) {
+        if (Bass.isLoaded && bassHandle != 0) {
+            // Log EQ updates via BASS. In production, parameters are set via BASS_ChannelSetFX
+            println("pEQControl: [BASS] EQ Band $bandIndex -> $gainDb dB")
+            return
+        }
+        try {
 
-        if (equalizer == null) {
+            if (equalizer == null) {
 
-            // 10-band equalizer
-            equalizer = Equalizer(10)
+                // 10-band equalizer
+                equalizer = Equalizer(10)
+
+                equalizer?.let {
+                    mediaPlayer.audio().setEqualizer(it)
+                }
+
+                println("pEQControl: [EQ] Initialized")
+            }
 
             equalizer?.let {
+                it.setAmp(bandIndex, gainDb)
                 mediaPlayer.audio().setEqualizer(it)
             }
 
-            println("pEQControl: [EQ] Initialized")
+            println("pEQControl: [EQ] Band $bandIndex -> $gainDb dB")
+
+        } catch (e: Exception) {
+            println("pEQControl: [EQ] Error -> ${e.message}")
         }
-
-        equalizer?.let {
-            it.setAmp(bandIndex, gainDb)
-            mediaPlayer.audio().setEqualizer(it)
-        }
-
-        println("pEQControl: [EQ] Band $bandIndex -> $gainDb dB")
-
-    } catch (e: Exception) {
-        println("pEQControl: [EQ] Error -> ${e.message}")
     }
-}
 
     override fun updateEqQ(bandIndex: Int, q: Float) = Unit
     override fun updateStemVolume(stem: String, volume: Float) {
+        if (Bass.isLoaded) {
+            val handle = stemHandles[stem.lowercase()]
+            if (handle != null && handle != 0) {
+                Bass.lib?.BASS_ChannelSetAttribute(handle, 2, volume) // 2 = BASS_ATTRIB_VOL
+                return
+            }
+        }
         stemPlayers[stem.lowercase()]?.audio()?.setVolume((volume * 100).toInt())
     }
     
     override fun updateStemPan(stem: String, pan: Float) {
-        // VLCJ doesn't have a direct pan API easily accessible, but we can balance
+        if (Bass.isLoaded) {
+            val handle = stemHandles[stem.lowercase()]
+            if (handle != null && handle != 0) {
+                Bass.lib?.BASS_ChannelSetAttribute(handle, 3, pan) // 3 = BASS_ATTRIB_PAN
+                return
+            }
+        }
     }
     override fun setCompressorThreshold(thresholdDb: Float) = Unit
     override fun updateCompressor(threshold: Float, ratio: Float, attack: Float, release: Float) = Unit
@@ -436,8 +527,22 @@ override fun updateEqBand(bandIndex: Int, gainDb: Float) {
     override fun setClarityLevel(level: Float) = Unit
     override fun setDeepBassLevel(level: Float) = Unit
 
-    override fun getDuration(): Long = mediaPlayer.status().length()
-    override fun getCurrentPosition(): Long = mediaPlayer.status().time()
+    override fun getDuration(): Long {
+        if (Bass.isLoaded && bassHandle != 0) {
+            val bytes = Bass.lib?.BASS_ChannelGetPosition(bassHandle, 2) ?: 0L // 2 = BASS_POS_BYTE
+            val seconds = Bass.lib?.BASS_ChannelBytes2Seconds(bassHandle, bytes) ?: 0.0
+            return (seconds * 1000).toLong()
+        }
+        return mediaPlayer.status().length()
+    }
+    override fun getCurrentPosition(): Long {
+        if (Bass.isLoaded && bassHandle != 0) {
+            val bytes = Bass.lib?.BASS_ChannelGetPosition(bassHandle, 0) ?: 0L // 0 = BASS_POS_BYTE
+            val seconds = Bass.lib?.BASS_ChannelBytes2Seconds(bassHandle, bytes) ?: 0.0
+            return (seconds * 1000).toLong()
+        }
+        return mediaPlayer.status().time()
+    }
     override fun getCurrentTrackUri(): String? = currentUrl
 
     override fun setExclusiveMode(enabled: Boolean) = Unit

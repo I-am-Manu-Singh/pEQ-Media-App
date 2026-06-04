@@ -268,6 +268,10 @@ implementation(
                 implementation(
                     "net.java.dev.jna:jna-platform:5.14.0"
                 )
+
+                implementation(
+                    "net.jthink:jaudiotagger:3.0.1"
+                )
             }
         }
 

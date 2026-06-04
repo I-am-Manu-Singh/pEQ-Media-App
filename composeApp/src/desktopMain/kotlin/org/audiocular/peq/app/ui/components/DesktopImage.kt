@@ -159,54 +159,15 @@ actual fun pEQImage(
 private fun extractEmbeddedArt(file: File): ImageBitmap? {
     try {
         if (!file.exists()) return null
-        val bytes = file.inputStream().use { stream ->
-            // Read at most 6MB to avoid out-of-memory
-            val buffer = ByteArray(6 * 1024 * 1024)
-            val bytesRead = stream.read(buffer)
-            if (bytesRead <= 0) return null
-            buffer.copyOf(bytesRead)
-        }
-        
-        // PNG magic bytes
-        val pngMagic = byteArrayOf(0x89.toByte(), 0x50.toByte(), 0x4E.toByte(), 0x47.toByte(), 0x0D.toByte(), 0x0A.toByte(), 0x1A.toByte(), 0x0A.toByte())
-        val pngIndex = findSubarray(bytes, pngMagic)
-        if (pngIndex != -1) {
-            val bis = java.io.ByteArrayInputStream(bytes, pngIndex, bytes.size - pngIndex)
-            ImageIO.read(bis)?.toComposeImageBitmap()?.let { return it }
-        }
-
-        // JPEG magic bytes
-        val jpegMagic = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
-        var startSearch = 0
-        while (startSearch < bytes.size - 3) {
-            val jpegIndex = findSubarray(bytes, jpegMagic, startSearch)
-            if (jpegIndex == -1) break
-            try {
-                val bis = java.io.ByteArrayInputStream(bytes, jpegIndex, bytes.size - jpegIndex)
-                val img = ImageIO.read(bis)
-                if (img != null) {
-                    return img.toComposeImageBitmap()
-                }
-            } catch (_: Exception) {}
-            startSearch = jpegIndex + 1
-        }
+        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+        val tag = audioFile.tag ?: return null
+        val artwork = tag.firstArtwork ?: return null
+        val binaryData = artwork.binaryData ?: return null
+        val bis = java.io.ByteArrayInputStream(binaryData)
+        val img = ImageIO.read(bis) ?: return null
+        return img.toComposeImageBitmap()
     } catch (e: Exception) {
-        println("pEQControl: Failed to extract embedded art: ${e.message}")
+        println("pEQControl: Failed to extract embedded art via jaudiotagger: ${e.message}")
     }
     return null
-}
-
-private fun findSubarray(array: ByteArray, sub: ByteArray, start: Int = 0): Int {
-    if (sub.isEmpty() || array.size < sub.size) return -1
-    for (i in start..array.size - sub.size) {
-        var match = true
-        for (j in sub.indices) {
-            if (array[i + j] != sub[j]) {
-                match = false
-                break
-            }
-        }
-        if (match) return i
-    }
-    return -1
 }

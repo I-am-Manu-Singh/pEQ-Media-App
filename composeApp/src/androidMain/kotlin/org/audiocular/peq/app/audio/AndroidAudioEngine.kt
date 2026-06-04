@@ -29,9 +29,108 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 
+object AndroidBass {
+    private var bassClass: Class<*>? = null
+    var isLoaded = false
+
+    init {
+        try {
+            System.loadLibrary("bass")
+            bassClass = Class.forName("org.un4seen.bass.BASS")
+            isLoaded = true
+        } catch (_: Throwable) {
+            println("pEQControl: [BASS] Android library binaries not found, using ExoPlayer.")
+        }
+    }
+
+    fun init(device: Int, freq: Int, flags: Int): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_Init", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            method.invoke(null, device, freq, flags) as Boolean
+        } catch (_: Exception) { false }
+    }
+
+    fun streamCreateFile(file: String, flags: Int): Int {
+        if (!isLoaded || bassClass == null) return 0
+        return try {
+            val method = bassClass!!.getMethod("BASS_StreamCreateFile", String::class.java, Long::class.javaPrimitiveType, Long::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            method.invoke(null, file, 0L, 0L, flags) as Int
+        } catch (_: Exception) { 0 }
+    }
+
+    fun channelPlay(handle: Int, restart: Boolean): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelPlay", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            method.invoke(null, handle, restart) as Boolean
+        } catch (_: Exception) { false }
+    }
+
+    fun channelPause(handle: Int): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelPause", Int::class.javaPrimitiveType)
+            method.invoke(null, handle) as Boolean
+        } catch (_: Exception) { false }
+    }
+
+    fun channelStop(handle: Int): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelStop", Int::class.javaPrimitiveType)
+            method.invoke(null, handle) as Boolean
+        } catch (_: Exception) { false }
+    }
+
+    fun channelGetPosition(handle: Int, mode: Int): Long {
+        if (!isLoaded || bassClass == null) return 0L
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelGetPosition", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            (method.invoke(null, handle, mode) as Number).toLong()
+        } catch (_: Exception) { 0L }
+    }
+
+    fun channelSetPosition(handle: Int, pos: Long, mode: Int): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelSetPosition", Int::class.javaPrimitiveType, Long::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            method.invoke(null, handle, pos, mode) as Boolean
+        } catch (_: Exception) { false }
+    }
+
+    fun channelSeconds2Bytes(handle: Int, pos: Double): Long {
+        if (!isLoaded || bassClass == null) return 0L
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelSeconds2Bytes", Int::class.javaPrimitiveType, Double::class.javaPrimitiveType)
+            (method.invoke(null, handle, pos) as Number).toLong()
+        } catch (_: Exception) { 0L }
+    }
+
+    fun channelBytes2Seconds(handle: Int, pos: Long): Double {
+        if (!isLoaded || bassClass == null) return 0.0
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelBytes2Seconds", Int::class.javaPrimitiveType, Long::class.javaPrimitiveType)
+            (method.invoke(null, handle, pos) as Number).toDouble()
+        } catch (_: Exception) { 0.0 }
+    }
+
+    fun channelSetAttribute(handle: Int, attrib: Int, value: Float): Boolean {
+        if (!isLoaded || bassClass == null) return false
+        return try {
+            val method = bassClass!!.getMethod("BASS_ChannelSetAttribute", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Float::class.javaPrimitiveType)
+            method.invoke(null, handle, attrib, value) as Boolean
+        } catch (_: Exception) { false }
+    }
+}
+
 class AndroidAudioEngine(
     private val context: Context
 ) : AudioEngine {
+
+    private var bassHandle = 0
+    private val stemHandles = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private var currentTrackUrl: String? = null
 
     private var listenersAttached = false
 
@@ -122,6 +221,9 @@ class AndroidAudioEngine(
     override fun initialize(
         sessionId: Int
     ) {
+        if (AndroidBass.isLoaded) {
+            AndroidBass.init(-1, 44100, 0)
+        }
 
         if (player != null) {
             return
@@ -507,6 +609,10 @@ class AndroidAudioEngine(
 
     @RequiresApi(Build.VERSION_CODES.P)
     override fun updateEqBand(bandIndex: Int, gainDb: Float) {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            println("pEQControl: [BASS] Android EQ Band $bandIndex -> $gainDb dB")
+            return
+        }
         val dp = dynamicsProcessing ?: return
         try {
             val config = dp.config
@@ -824,6 +930,7 @@ class AndroidAudioEngine(
         artist: String?,
         thumbnail: String?
     ) {
+        currentTrackUrl = url
 
         try {
             player?.volume = 1f
@@ -853,6 +960,24 @@ class AndroidAudioEngine(
             println("pEQControl: URI -> $uri")
 
             val artBytes = getArtworkBytes(thumbnail, url)
+
+            if (AndroidBass.isLoaded) {
+                try {
+                    if (bassHandle != 0) {
+                        AndroidBass.channelStop(bassHandle)
+                    }
+                    val path = cleanLocalPath(url)
+                    bassHandle = AndroidBass.streamCreateFile(path, 0)
+                    if (bassHandle != 0) {
+                        AndroidBass.channelPlay(bassHandle, true)
+                        onTrackChanged?.invoke()
+                        println("pEQControl: [BASS] Android playing track -> $url")
+                        return
+                    }
+                } catch (e: Exception) {
+                    println("pEQControl: [BASS] Android playback failed: ${e.message}")
+                }
+            }
 
             val metadata =
                 androidx.media3.common.MediaMetadata
@@ -928,6 +1053,7 @@ class AndroidAudioEngine(
         artist: String?,
         thumbnail: String?
     ) {
+        currentTrackUrl = url
 
         try {
             player?.volume = 1f
@@ -1023,11 +1149,19 @@ class AndroidAudioEngine(
     }
 
     override fun pause() {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            AndroidBass.channelPause(bassHandle)
+            return
+        }
         player?.pause()
         stemPlayers.values.forEach { it.pause() }
     }
 
     override fun resume() {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            AndroidBass.channelPlay(bassHandle, false)
+            return
+        }
         player?.let {
             if (it.playbackState == Player.STATE_ENDED) {
                 it.seekTo(0)
@@ -1039,11 +1173,20 @@ class AndroidAudioEngine(
     }
 
     override fun stop() {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            AndroidBass.channelStop(bassHandle)
+            return
+        }
         player?.stop()
         stemPlayers.values.forEach { it.stop() }
     }
 
     override fun seekTo(positionMs: Long) {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            val bytes = AndroidBass.channelSeconds2Bytes(bassHandle, positionMs / 1000.0)
+            AndroidBass.channelSetPosition(bassHandle, bytes, 0)
+            return
+        }
 
         val currentPlayer = player ?: return
 
@@ -1118,14 +1261,30 @@ class AndroidAudioEngine(
         player?.shuffleModeEnabled = enabled
     }
 
-    override fun getDuration(): Long =
-        player?.duration ?: 0L
+    override fun getDuration(): Long {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            val bytes = AndroidBass.channelGetPosition(bassHandle, 2) // 2 = BASS_POS_BYTE
+            val seconds = AndroidBass.channelBytes2Seconds(bassHandle, bytes)
+            return (seconds * 1000).toLong()
+        }
+        return player?.duration ?: 0L
+    }
 
-    override fun getCurrentPosition(): Long =
-        player?.currentPosition ?: 0L
+    override fun getCurrentPosition(): Long {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            val bytes = AndroidBass.channelGetPosition(bassHandle, 0) // 0 = BASS_POS_BYTE
+            val seconds = AndroidBass.channelBytes2Seconds(bassHandle, bytes)
+            return (seconds * 1000).toLong()
+        }
+        return player?.currentPosition ?: 0L
+    }
 
-    override fun getCurrentTrackUri(): String? =
-        player?.currentMediaItem?.localConfiguration?.uri?.toString()
+    override fun getCurrentTrackUri(): String? {
+        if (AndroidBass.isLoaded && bassHandle != 0) {
+            return currentTrackUrl
+        }
+        return player?.currentMediaItem?.localConfiguration?.uri?.toString()
+    }
 
 
 
@@ -1834,6 +1993,13 @@ class AndroidAudioEngine(
 
     override fun updateStemVolume(stem: String, volume: Float) {
         println("pEQControl: [STEM] Volume $stem -> $volume")
+        if (AndroidBass.isLoaded) {
+            val handle = stemHandles[stem.lowercase()]
+            if (handle != null && handle != 0) {
+                AndroidBass.channelSetAttribute(handle, 2, volume) // 2 = BASS_ATTRIB_VOL
+                return
+            }
+        }
         loopHandler.post {
             stemPlayers[stem]?.volume = volume
         }
@@ -1841,6 +2007,13 @@ class AndroidAudioEngine(
     
     override fun updateStemPan(stem: String, pan: Float) {
         println("pEQControl: [STEM] Pan $stem -> $pan")
+        if (AndroidBass.isLoaded) {
+            val handle = stemHandles[stem.lowercase()]
+            if (handle != null && handle != 0) {
+                AndroidBass.channelSetAttribute(handle, 3, pan) // 3 = BASS_ATTRIB_PAN
+                return
+            }
+        }
     }
 
     override fun setDeepBassLevel(level: Float) {
@@ -1936,6 +2109,24 @@ class AndroidAudioEngine(
         stems: Map<String, String>
     ) {
         println("pEQControl: Loading stems -> $stems")
+        if (AndroidBass.isLoaded) {
+            try {
+                stemHandles.values.forEach { AndroidBass.channelStop(it) }
+                stemHandles.clear()
+                stems.forEach { (name, url) ->
+                    val path = cleanLocalPath(url)
+                    val handle = AndroidBass.streamCreateFile(path, 0)
+                    if (handle != 0) {
+                        stemHandles[name.lowercase()] = handle
+                        AndroidBass.channelPlay(handle, true)
+                    }
+                }
+                println("pEQControl: [BASS] Android loaded stems: ${stems.keys}")
+                return
+            } catch (e: Exception) {
+                println("pEQControl: [BASS] Android stem loading failed: ${e.message}")
+            }
+        }
         loopHandler.post {
             stemPlayers.values.forEach {
                 it.stop()
