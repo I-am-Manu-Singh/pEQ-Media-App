@@ -18,7 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun ChordVisualizer(chord: String, modifier: Modifier = Modifier) {
+fun ChordVisualizer(
+    chord: String, 
+    guitarShapes: Map<String, List<Int>> = emptyMap(),
+    pianoShapes: Map<String, List<Int>> = emptyMap(),
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = Color(0xFF111111),
@@ -41,14 +46,14 @@ fun ChordVisualizer(chord: String, modifier: Modifier = Modifier) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("GUITAR (EADGBE)", fontSize = 8.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    GuitarChordWidget(chord)
+                    GuitarChordWidget(chord, guitarShapes)
                 }
                 
                 // Piano Keyboard
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("PIANO (88-KEY)", fontSize = 8.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    PianoChordWidget(chord)
+                    PianoChordWidget(chord, pianoShapes)
                 }
             }
             
@@ -66,26 +71,8 @@ fun ChordVisualizer(chord: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun GuitarChordWidget(chord: String) {
-    // Chord DB: [StringIndex (0-5)] to [Fret (0-5, -1 for mute)]
-    val shapes = mapOf(
-        "C" to listOf(-1, 3, 2, 0, 1, 0),
-        "Cm" to listOf(-1, 3, 5, 5, 4, 3),
-        "D" to listOf(-1, -1, 0, 2, 3, 2),
-        "Dm" to listOf(-1, -1, 0, 2, 3, 1),
-        "E" to listOf(0, 2, 2, 1, 0, 0),
-        "Em" to listOf(0, 2, 2, 0, 0, 0),
-        "F" to listOf(1, 3, 3, 2, 1, 1),
-        "Fm" to listOf(1, 3, 3, 1, 1, 1),
-        "G" to listOf(3, 2, 0, 0, 0, 3),
-        "Gm" to listOf(3, 5, 5, 3, 3, 3),
-        "A" to listOf(-1, 0, 2, 2, 2, 0),
-        "Am" to listOf(-1, 0, 2, 2, 1, 0),
-        "B" to listOf(-1, 2, 4, 4, 4, 2),
-        "Bm" to listOf(-1, 2, 4, 4, 3, 2)
-    )
-
-    val currentShape = shapes[chord.replace("#", "s")] ?: listOf(0, 0, 0, 0, 0, 0)
+fun GuitarChordWidget(chord: String, shapes: Map<String, List<Int>>) {
+    val currentShape = shapes[chord] ?: shapes[chord.replace("#", "s")] ?: listOf(0, 0, 0, 0, 0, 0)
 
     Canvas(modifier = Modifier.size(80.dp, 100.dp)) {
         val width = size.width
@@ -129,26 +116,8 @@ fun GuitarChordWidget(chord: String) {
 }
 
 @Composable
-fun PianoChordWidget(chord: String) {
-    // Notes in chord (semitone offsets from C)
-    val chordNotes = mapOf(
-        "C" to listOf(0, 4, 7),
-        "Cm" to listOf(0, 3, 7),
-        "D" to listOf(2, 6, 9),
-        "Dm" to listOf(2, 5, 9),
-        "E" to listOf(4, 8, 11),
-        "Em" to listOf(4, 7, 11),
-        "F" to listOf(5, 9, 0),
-        "Fm" to listOf(5, 8, 0),
-        "G" to listOf(7, 11, 2),
-        "Gm" to listOf(7, 10, 2),
-        "A" to listOf(9, 1, 4),
-        "Am" to listOf(9, 0, 4),
-        "B" to listOf(11, 3, 6),
-        "Bm" to listOf(11, 2, 6)
-    )
-
-    val activeNotes = chordNotes[chord.replace("#", "s")] ?: listOf(0, 4, 7)
+fun PianoChordWidget(chord: String, shapes: Map<String, List<Int>>) {
+    val activeNotes = shapes[chord] ?: shapes[chord.replace("#", "s")] ?: emptyList()
 
     Canvas(modifier = Modifier.size(140.dp, 50.dp)) {
         val width = size.width
@@ -181,7 +150,6 @@ fun PianoChordWidget(chord: String) {
         
         // Chord Indicators
         activeNotes.forEach { note ->
-            val octaveOffset = if (note < 0) -1 else 0
             val x = (note % 12) * kw + kw / 2
             drawCircle(Color.Cyan, 5f, Offset(x, height - 10f))
         }

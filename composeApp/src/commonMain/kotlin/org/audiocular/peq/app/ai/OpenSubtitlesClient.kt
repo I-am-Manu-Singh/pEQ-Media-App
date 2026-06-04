@@ -7,6 +7,7 @@ import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.audiocular.peq.app.data.pEQConstants
 
 @Serializable
 data class OSSubtitleResponse(
@@ -39,7 +40,10 @@ data class OSDownloadResponse(
     val link: String
 )
 
-class OpenSubtitlesClient(private val apiKey: String) {
+
+class OpenSubtitlesClient(apiKey: String) {
+    private val effectiveApiKey = apiKey.ifBlank { pEQConstants.OPEN_SUBTITLES_INTERNAL_KEY }
+    
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -50,10 +54,10 @@ class OpenSubtitlesClient(private val apiKey: String) {
     }
 
     suspend fun searchSubtitles(query: String, lang: String = "en"): List<OSSubtitleAttributes> {
-        if (apiKey.isBlank()) return emptyList()
+        if (effectiveApiKey.isBlank()) return emptyList()
         return try {
             val response: OSSubtitleResponse = client.get("https://api.opensubtitles.com/api/v1/subtitles") {
-                header("Api-Key", apiKey)
+                header("Api-Key", effectiveApiKey)
                 header("User-Agent", "pEQ Neural Workstation v1.0")
                 parameter("query", query)
                 parameter("languages", lang)
@@ -65,10 +69,10 @@ class OpenSubtitlesClient(private val apiKey: String) {
     }
 
     suspend fun getDownloadLink(fileId: Int): String? {
-        if (apiKey.isBlank()) return null
+        if (effectiveApiKey.isBlank()) return null
         return try {
             val response: OSDownloadResponse = client.post("https://api.opensubtitles.com/api/v1/download") {
-                header("Api-Key", apiKey)
+                header("Api-Key", effectiveApiKey)
                 header("User-Agent", "pEQ Neural Workstation v1.0")
                 header("Content-Type", "application/json")
                 setBody(mapOf("file_id" to fileId))

@@ -27,13 +27,19 @@ fun main(args: Array<String>) {
     "sun.awt.disableMixing",
     "true"
 )
-System.setProperty(
-
-    "skiko.renderApi",
-
-    "OPENGL"
-
+   System.setProperty(
+    "compose.interop.blending",
+    "true"
 )
+    val isMacOs =
+        System.getProperty("os.name")
+            .lowercase()
+            .contains("mac")
+
+    System.setProperty(
+        "skiko.renderApi",
+        if (isMacOs) "METAL" else "OPENGL"
+    )
 
     System.setProperty(
         "apple.awt.application.name",
@@ -78,7 +84,7 @@ System.setProperty(
                 persistenceManager =
                     DesktopPersistenceManager(),
 
-                stemSplitter = null,
+                stemSplitter = org.audiocular.peq.app.ai.DesktoppEQStemSplitter(),
 
                 cloudDownloader = null
 
@@ -474,9 +480,9 @@ System.setProperty(
                 state =
                     rememberWindowState(
 
-                        width = 340.dp,
+                        width = 360.dp,
 
-                        height = 110.dp,
+                        height = if (viewModel.playbackQueue.isNotEmpty()) 460.dp else 145.dp,
 
                         position =
                             WindowPosition.Aligned(
@@ -496,10 +502,10 @@ System.setProperty(
 
             ) {
 
+                val curItem = viewModel.currentMediaItem.value
                 pEQWidgetCommand(
 
-                        item =
-                            viewModel.currentMediaItem.value,
+                        item = curItem,
 
                         isPlaying =
                             viewModel.isPlaying.value,
@@ -525,7 +531,14 @@ System.setProperty(
 
                             viewModel.showMiniPlayer.value =
                                 false
-                        }
+                        },
+                        progress = if (viewModel.currentDuration.value > 0) viewModel.currentPosition.value.toFloat() / viewModel.currentDuration.value.toFloat() else 0f,
+                        duration = viewModel.currentDuration.value,
+                        currentPosition = viewModel.currentPosition.value,
+                        isFavorite = if (curItem != null) viewModel.favoriteItems.contains(curItem) else false,
+                        queue = viewModel.playbackQueue,
+                        onQueueItemClick = { viewModel.playMediaItem(it) },
+                        onFavoriteToggle = { curItem?.let { viewModel.toggleFavorite(it) } }
                     )
             }
         }

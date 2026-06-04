@@ -40,74 +40,271 @@ fun QueueContent(
     val searchQuery = viewModel.globalSearchQuery.value
 
     val filtered = queue.filter {
-        it.title.contains(searchQuery, ignoreCase = true) || it.subtitle.contains(searchQuery, ignoreCase = true)
+        it.title.contains(searchQuery, ignoreCase = true) ||
+                it.subtitle.contains(searchQuery, ignoreCase = true)
     }
 
     LaunchedEffect(currentIndex, queue.size) {
         if (queue.isNotEmpty() && currentIndex in queue.indices) {
-            listState.animateScrollToItem(index = (currentIndex + 1).coerceAtLeast(0))
+            listState.animateScrollToItem(
+                index = (currentIndex + 1).coerceAtLeast(0)
+            )
         }
     }
 
     if (filtered.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Surface(modifier = Modifier.size(86.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    Box(contentAlignment = Alignment.Center) { Icon(imageVector = Icons.Default.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), modifier = Modifier.size(38.dp)) }
+
+                Surface(
+                    modifier = Modifier.size(86.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                            modifier = Modifier.size(38.dp)
+                        )
+                    }
                 }
+
                 Spacer(Modifier.height(18.dp))
-                Text(text = if (searchQuery.isNotBlank()) "No Matching Queue Items" else "Queue Empty", fontSize = 19.sp, fontWeight = FontWeight.Black)
+
+                Text(
+                    text = if (searchQuery.isNotBlank())
+                        "No Matching Queue Items"
+                    else
+                        "Queue Empty",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Black
+                )
+
                 Spacer(Modifier.height(6.dp))
-                Text(text = if (searchQuery.isNotBlank()) "No queued media matched your search." else "Your playback queue is currently empty.", textAlign = TextAlign.Center, fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Text(
+                    text = if (searchQuery.isNotBlank())
+                        "No queued media matched your search."
+                    else
+                        "Your playback queue is currently empty.",
+                    textAlign = TextAlign.Center,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-    } else {
-        LazyColumn(state = listState, modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 90.dp)) {
-            itemsIndexed(items = filtered, key = { index, item -> "${item.path}_${index}_${item.id}" }) { index, item ->
-                val currentPlayingPath = viewModel.currentMediaItem.value?.path
-                val isCurrent = item.path == currentPlayingPath
-                var accumulatedDrag by remember(item.path, index) { mutableFloatStateOf(0f) }
-                val dismissState = rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.22f }, confirmValueChange = { value -> if (isCurrent) return@rememberSwipeToDismissBoxState false; if (value == SwipeToDismissBoxValue.EndToStart) { viewModel.removeFromQueue(item); true } else false })
 
-                SwipeToDismissBox(state = dismissState, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !isCurrent, backgroundContent = {
-                    if (!isCurrent) {
-                        Surface(modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)) {
-                            Box(modifier = Modifier.fillMaxSize().padding(end = 18.dp), contentAlignment = Alignment.CenterEnd) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(text = "REMOVE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+    } else {
+
+        LazyColumn(
+            state = listState,
+            modifier = modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = 90.dp
+            )
+        ) {
+
+            itemsIndexed(
+                items = filtered,
+                key = { index, item ->
+                    "${item.path}_${index}_${item.id}"
+                }
+            ) { index, item ->
+
+                val currentPlayingPath =
+                    viewModel.currentMediaItem.value?.path
+
+                val isCurrent = item.path == currentPlayingPath
+
+                var accumulatedDrag by remember(item.path, index) {
+                    mutableFloatStateOf(0f)
+                }
+
+                val dismissState = rememberSwipeToDismissBoxState(
+                    positionalThreshold = { it * 0.22f },
+                    confirmValueChange = { value ->
+
+                        if (isCurrent) {
+                            return@rememberSwipeToDismissBoxState false
+                        }
+
+                        if (value == SwipeToDismissBoxValue.EndToStart) {
+                            viewModel.removeFromQueue(item)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                )
+
+                SwipeToDismissBox(
+                    state = dismissState,
+                    enableDismissFromStartToEnd = false,
+                    enableDismissFromEndToStart = !isCurrent,
+
+                    backgroundContent = {
+
+                        if (!isCurrent) {
+
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                            ) {
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(end = 18.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+
+                                        Spacer(Modifier.width(6.dp))
+
+                                        Text(
+                                            text = "REMOVE",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }) {
-                    MediaItemCard(item = item, isActive = isCurrent, showFavorite = false, showMenu = true, showIndex = true, index = index + 1, onClick = {
-                        val latestIndex = queue.indexOfFirst { it.path == item.path }
-                        if (latestIndex != -1) viewModel.playFromQueue(queue[latestIndex])
-                    }, trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.DragHandle, contentDescription = null, tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp).pointerInput(item.path, queue.size) {
-                                detectVerticalDragGestures(onVerticalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    accumulatedDrag += dragAmount
-                                    val currentItemIndex = queue.indexOfFirst { it.path == item.path }
-                                    if (currentItemIndex == -1) return@detectVerticalDragGestures
-                                    val threshold = 70f
-                                    if (accumulatedDrag > threshold && currentItemIndex < queue.lastIndex) {
-                                        viewModel.reorderQueue(currentItemIndex, currentItemIndex + 1)
-                                        accumulatedDrag = 0f
-                                    } else if (accumulatedDrag < -threshold && currentItemIndex > 0) {
-                                        viewModel.reorderQueue(currentItemIndex, currentItemIndex - 1)
-                                        accumulatedDrag = 0f
-                                    }
-                                }, onDragEnd = { accumulatedDrag = 0f })
-                            })
+                ) {
+
+                    MediaItemCard(
+                        item = item,
+                        isActive = isCurrent,
+                        showFavorite = false,
+                        showMenu = true,
+                        showIndex = true,
+                        index = index + 1,
+
+                        onClick = {
+                            val latestIndex = queue.indexOfFirst {
+                                it.path == item.path
+                            }
+
+                            if (latestIndex != -1) {
+                                viewModel.playFromQueue(queue[latestIndex])
+                            }
+                        },
+
+                        trailing = {
+
+    Box(
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (isCurrent)
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            )
+            .pointerInput(item.path, queue.size) {
+
+                detectVerticalDragGestures(
+
+                    onVerticalDrag = { change, dragAmount ->
+
+                        change.consume()
+
+                        accumulatedDrag += dragAmount
+
+                        val currentItemIndex =
+                            queue.indexOfFirst {
+                                it.path == item.path
+                            }
+
+                        if (currentItemIndex == -1) {
+                            return@detectVerticalDragGestures
                         }
-                    }, modifier = Modifier.animateContentSize())
+
+                        val threshold = 65f
+
+                        // SWIPE DOWN = MOVE DOWN
+                        if (
+                            accumulatedDrag > threshold &&
+                            currentItemIndex < queue.lastIndex
+                        ) {
+
+                            viewModel.reorderQueue(
+                                currentItemIndex,
+                                currentItemIndex + 1
+                            )
+
+                            accumulatedDrag = 0f
+                        }
+
+                        // SWIPE UP = MOVE UP
+                        else if (
+                            accumulatedDrag < -threshold &&
+                            currentItemIndex > 0
+                        ) {
+
+                            viewModel.reorderQueue(
+                                currentItemIndex,
+                                currentItemIndex - 1
+                            )
+
+                            accumulatedDrag = 0f
+                        }
+                    },
+
+                    onDragEnd = {
+                        accumulatedDrag = 0f
+                    }
+                )
+            }
+            .padding(horizontal = 10.dp, vertical = 14.dp),
+
+        contentAlignment = Alignment.Center
+    ) {
+
+        Icon(
+            imageVector = Icons.Default.DragHandle,
+            contentDescription = "Reorder Queue",
+            tint = if (isCurrent)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+},
+
+                        modifier = Modifier.animateContentSize()
+                    )
                 }
             }
-            item(key = "queue_bottom_spacing") { Spacer(Modifier.height(12.dp)) }
+
+            item(key = "queue_bottom_spacing") {
+                Spacer(Modifier.height(12.dp))
+            }
         }
     }
 }
@@ -118,22 +315,110 @@ fun PlayerQueueDrawer(
     viewModel: AppViewModel,
     onClose: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "UP NEXT", fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.primary)
-                Button(onClick = { 
-                    viewModel.selectedItemForPlaylist.value = null
-                    viewModel.isPlaylistPickerShown.value = true 
-                }, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("ADD ALL TO PLAYLIST", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+    ModalBottomSheet(
+        onDismissRequest = onClose
+    ) {
+
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "UP NEXT",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // SHUFFLE ALL BUTTON
+                FilledTonalButton(
+                    onClick = {
+
+                        viewModel.shuffleQueue()
+
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 14.dp,
+                        vertical = 8.dp
+                    ),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor =
+                            if (viewModel.isShuffleEnabled)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            else
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                ) {
+
+                    Icon(
+                        Icons.Default.Shuffle,
+                        null,
+                        modifier = Modifier.size(16.dp),
+                        tint =
+                            if (viewModel.isShuffleEnabled)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.width(6.dp))
+
+                    Text(
+                        "SHUFFLE ALL",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color =
+                            if (viewModel.isShuffleEnabled)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurface
+                    )
                 }
-                IconButton(onClick = { viewModel.shuffleQueue() }, modifier = Modifier.padding(start = 8.dp)) {
-                    Icon(Icons.Default.Shuffle, null, tint = if (viewModel.isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+
+                // ADD TO PLAYLIST BUTTON
+                Button(
+                    onClick = {
+                        viewModel.isPlaylistBulkAction.value = true
+                        viewModel.selectedItemForPlaylist.value = null
+                        viewModel.isPlaylistPickerShown.value = true
+
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 16.dp,
+                        vertical = 8.dp
+                    )
+                ) {
+
+                    Icon(
+                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                        null,
+                        modifier = Modifier.size(18.dp)
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Text(
+                        "ADD ALL",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
+
             QueueContent(viewModel = viewModel)
         }
     }

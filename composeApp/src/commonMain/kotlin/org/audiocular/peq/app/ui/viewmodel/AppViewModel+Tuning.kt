@@ -5,7 +5,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withTimeoutOrNull
-
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.*
 import org.audiocular.peq.app.data.*
 
@@ -23,33 +23,42 @@ fun AppViewModel.searchAutoEqRepository(query: String) {
     scope.launch {
         isAutoEqLoading.value = true
         try {
-            // Simulate neural lookup delay
-            delay(400)
-            // In a real app, this would query a database or API
-            val mockResults = listOf(
-                AutoEqProfile("WH-1000XM4", "Sony", "Over-ear"),
-                AutoEqProfile("HD 600", "Sennheiser", "Open-back"),
-                AutoEqProfile("AirPods Pro 2", "Apple", "In-ear"),
-                AutoEqProfile("DT 990 Pro", "Beyerdynamic", "Over-ear")
-            ).filter { it.name.contains(query, ignoreCase = true) }
+            // 🔍 Real Neural Search
+            delay(250)
+            val json = scanner?.readResourceContent("autoeq_database.json") ?: "[]"
+            val allProfiles = Json.decodeFromString<List<AutoEqProfile>>(json)
+            
+            val filtered = allProfiles.filter { 
+                it.name.contains(query, ignoreCase = true) || it.brand.contains(query, ignoreCase = true) 
+            }
             
             autoEqSearchResults.clear()
-            autoEqSearchResults.addAll(mockResults)
+            autoEqSearchResults.addAll(filtered)
+        } catch (e: Exception) {
+            println("pEQControl: [TUNING] AutoEq Repository Error: ${e.message}")
         } finally {
             isAutoEqLoading.value = false
         }
     }
 }
-
 fun AppViewModel.applyAutoEqProfile(profile: AutoEqProfile) {
     selectedAutoEqProfile.value = profile
+
     scope.launch {
-        showToast("Neural Profile: ${profile.name} Applied")
-        // Simulate applying EQ curves
-        for (i in 0 until 10) {
-            val randomGain = (-3..3).random().toFloat()
-            updateEqBand(i, randomGain)
-            delay(50)
+        showToast("Neural Compensation: ${profile.name} Engaged")
+
+        profile.gains?.let { gains: List<Float> ->
+
+            for ((index, gain) in gains.withIndex()) {
+                updateEqBand(index, gain)
+                delay(20)
+            }
+
+        } ?: run {
+
+            for (i in 0 until 10) {
+                updateEqBand(i, 0f)
+            }
         }
     }
 }
@@ -103,4 +112,34 @@ fun AppViewModel.setCompressorParams(threshold: Float, ratio: Float, attack: Flo
     compressorAttackMs.floatValue = attack
     compressorReleaseMs.floatValue = release
     audioEngine.updateCompressor(threshold, ratio, attack, release)
+}
+
+fun AppViewModel.autoOptimizeEq() {
+    val item = currentMediaItem.value ?: return
+    
+    scope.launch {
+        showToast("Neural Optimization Engaged...")
+        
+        // Trigger a fresh analysis if BPM/Key is missing
+        if (detectedBpmMap[item.id] == null) {
+            analyzeCurrentTrack()
+            delay(1000)
+        }
+        
+        val bpm = detectedBpmMap[item.id] ?: 120f
+        
+        // 🚀 SMART EQ PROFILE MAPPING
+        val targetGains = when {
+            bpm > 130f -> listOf(4f, 3f, 0f, -1f, -2f, 0f, 1f, 2f, 3f, 4f) // High energy / EDM
+            bpm < 90f -> listOf(2f, 1f, 0f, 0f, 0f, 1f, 2f, 1f, 0f, -1f)  // Lofi / Chill
+            else -> listOf(0f, 0f, 1f, 2f, 1f, 0f, -1f, -1f, 0f, 1f)     // Standard Rock/Pop
+        }
+        
+        targetGains.forEachIndexed { index, gain ->
+            updateEqBand(index, gain)
+            delay(100) // Smooth transition
+        }
+        
+        showToast("Neural Mastering Applied for ${item.title}")
+    }
 }

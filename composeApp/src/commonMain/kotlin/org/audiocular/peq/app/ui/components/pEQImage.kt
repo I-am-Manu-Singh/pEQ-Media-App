@@ -10,5 +10,6 @@ expect fun pEQImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     alpha: Float = 1f,
-    mediaType: org.audiocular.peq.app.data.MediaType? = null
+    mediaType: org.audiocular.peq.app.data.MediaType? = null,
+    fallbackPath: String? = null
 )

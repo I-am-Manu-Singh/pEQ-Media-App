@@ -101,28 +101,32 @@ fun AppViewModel.fetchLyrics(
 
     lastLyricsRequest = requestKey
 
-    lyricsFetchJob = scope.launch {
+    scope.launch {
+        /*
+         * SKIP IF LYRICS ALREADY EXIST
+         */
+        if (!item.lyrics.isNullOrBlank()) {
+            println("pEQControl: [LYRICS] Lyrics already present -> skipping fetch")
+            return@launch
+        }
 
-        activeJob.value = SplitJob(
-            id = "LYRICS_${Clock.System.now().toEpochMilliseconds()}",
+        val jobId = "LYRICS_${Clock.System.now().toEpochMilliseconds()}"
+        enqueueJob(SplitJob(
+            id = jobId,
             name = "Neural Lyrics Sync",
             progress = 0.3f,
-            status = "SEARCHING REPOSITORY"
-        )
+            status = ""
+        ))
 
         try {
-
-            val results =
+            // Add 10s timeout for network fetch
+            val results = withTimeoutOrNull(10000L) {
                 lyricsRepository.fetchLyrics(
                     artist = item.artist,
                     title = item.title,
-                    durationMs =
-                        if (item.durationMs > 0) {
-                            item.durationMs
-                        } else {
-                            null
-                        }
+                    durationMs = if (item.durationMs > 0) item.durationMs else null
                 )
+            }
 
             if (!results.isNullOrEmpty()) {
 
@@ -161,38 +165,25 @@ fun AppViewModel.fetchLyrics(
                             }
                     }
 
-                activeJob.value =
-                    activeJob.value?.copy(
-                        progress = 1.0f,
-                        status = "SYNC COMPLETE"
-                    )
+                updateJob(jobId, 1.0f, "SYNC COMPLETE")
 
             } else {
 
-                activeJob.value =
-                    activeJob.value?.copy(
-                        status = "NO MATCH FOUND",
-                        progress = 1.0f
-                    )
+                updateJob(jobId, 1.0f, "NO MATCH FOUND")
             }
 
+        } catch (e: CancellationException) {
+            updateJob(jobId, 1.0f, "REQUEST CANCELLED")
         } catch (e: Exception) {
-
-            println(
-                "pEQControl: [LYRICS] Fetch failed -> ${e.message}"
-            )
-
-            activeJob.value =
-                activeJob.value?.copy(
-                    status = "FETCH FAILED",
-                    progress = 1.0f
-                )
-
+            println("pEQControl: [LYRICS] Fetch failed -> ${e.message}")
+            updateJob(jobId, 1.0f, "FETCH FAILED")
         } finally {
-
+            if (lastLyricsRequest == requestKey && syncedLyrics.isEmpty()) {
+                // If it timed out or failed, mark as failed to prevent immediate re-fetch
+                // But allow re-fetch on next track play
+            }
             delay(1200)
-
-            activeJob.value = null
+            removeJob(jobId)
 
             if (
                 autoOpenEditor &&
@@ -214,25 +205,28 @@ fun AppViewModel.fetchSubtitles(autoOpenEditor: Boolean = true) {
         return
     }
     
+    isFetchingSubtitles.value = true
     scope.launch {
-    activeJob.value = SplitJob(
-        id = "SUBS_${Clock.System.now().toEpochMilliseconds()}",
-        name = "Subtitle Retrieval",
-        progress = 0.2f,
-        status = "SEARCHING OPENSUBS"
-    )
+        val jobId = "SUBS_${Clock.System.now().toEpochMilliseconds()}"
+        enqueueJob(SplitJob(
+            id = jobId,
+            name = "Subtitle Retrieval",
+            progress = 0.2f,
+            status = "SEARCHING OPENSUBS"
+        ))
 
-    try {
-            val matches = subtitleRepository.searchSubtitles(
-                title = item.title,
-                artist = item.artist,
-                durationMs = item.durationMs
-            )
+        try {
+            val matches = withTimeoutOrNull(15000L) {
+                subtitleRepository.searchSubtitles(
+                    title = item.title,
+                    artist = item.artist
+                )
+            }
             
-            if (matches.isNotEmpty()) {
+            if (!matches.isNullOrEmpty()) {
                 val best = matches.minByOrNull { it.score }
                 best?.let { match ->
-                    activeJob.value = activeJob.value?.copy(status = "DOWNLOADING", progress = 0.6f)
+                    updateJob(jobId, 0.6f, "DOWNLOADING")
                     val link = subtitleRepository.getDownloadLink(match.fileId)
                     if (link != null) {
                         showToast("Subtitles synchronized: ${match.fileName}")
@@ -240,11 +234,15 @@ fun AppViewModel.fetchSubtitles(autoOpenEditor: Boolean = true) {
                 }
             } else {
                 showToast("No subtitles found in archive")
+                updateJob(jobId, 1.0f, "NOT FOUND")
             }
         } catch (e: Exception) {
             println("pEQControl: [SUBTITLES] Repository Exception: ${e.message}")
+            updateJob(jobId, 1.0f, "ERROR")
         } finally {
-            activeJob.value = null
+            isFetchingSubtitles.value = false
+            delay(1000)
+            removeJob(jobId)
         }
     }
 }
@@ -257,17 +255,54 @@ private fun formatLrcTime(ms: Long): String {
 }
 fun AppViewModel.parseLrcInternal(content: String): List<SyncedLine> {
     val lines = mutableListOf<SyncedLine>()
-    val regex = Regex("\\[(\\d+):(\\d+)\\.(\\d+)\\](.*)")
+    // More flexible regex: [mm:ss.xx] or [mm:ss:xx] or [mm:ss]
+    val regex = Regex("\\[(\\d+):(\\d+)([\\.:](\\d+))?\\](.*)")
     content.lines().forEach { line ->
         regex.find(line)?.let { match ->
             val min = match.groupValues[1].toLong()
             val sec = match.groupValues[2].toLong()
-            val ms = match.groupValues[3].toLong() * 10
-            val text = match.groupValues[4].trim()
+            val msPart = match.groupValues[4]
+            val ms = if (msPart.isNotEmpty()) {
+                if (msPart.length == 2) msPart.toLong() * 10 else msPart.toLong()
+            } else 0L
+            val text = match.groupValues[5].trim()
             lines.add(SyncedLine(timestampMs = (min * 60 + sec) * 1000 + ms, text = text))
         }
     }
+    
+    // If empty, try SRT format
+    if (lines.isEmpty() && content.contains("-->")) {
+        return parseSrtInternal(content)
+    }
+    
+    return lines.sortedBy { it.timestampMs }
+}
+
+fun AppViewModel.parseSrtInternal(content: String): List<SyncedLine> {
+    val lines = mutableListOf<SyncedLine>()
+    val blocks = content.split(Regex("\\n\\s*\\n"))
+    val timestampRegex = Regex("(\\d{2}:\\d{2}:\\d{2},\\d{3})\\s*-->\\s*(\\d{2}:\\d{2}:\\d{2},\\d{3})")
+    
+    blocks.forEach { block ->
+        val parts = block.lines().filter { it.isNotBlank() }
+        if (parts.size >= 2) {
+            val tsLine = parts.find { it.contains("-->") } ?: ""
+            timestampRegex.find(tsLine)?.let { match ->
+                val startStr = match.groupValues[1]
+                val startTime = parseSrtTimeToMs(startStr)
+                val text = parts.drop(parts.indexOf(tsLine) + 1).joinToString(" ")
+                lines.add(SyncedLine(timestampMs = startTime, text = text))
+            }
+        }
+    }
     return lines
+}
+
+private fun parseSrtTimeToMs(time: String): Long {
+    val parts = time.replace(',', ':').split(':').map { it.toLongOrNull() ?: 0L }
+    return if (parts.size == 4) {
+        (parts[0] * 3600000) + (parts[1] * 60000) + (parts[2] * 1000) + parts[3]
+    } else 0L
 }
 private var lastLyricsRequest: String? = null
 
@@ -338,9 +373,9 @@ fun AppViewModel.requestChaptersPicker() {
 fun AppViewModel.parseChaptersInternal(content: String): List<MediaChapter> {
     val chapters = mutableListOf<MediaChapter>()
 
-    // Regex for [00:00.00] or 00:00:00
+    // More robust regex for various timestamp formats: [00:00:00.000], 00:00:00, 00:00, [00:00]
     val timeRegex =
-        Regex("(\\[?(\\d{1,2}:)?\\d{1,2}:\\d{1,2}[\\.|:]\\d{1,3}\\]?|\\d{1,2}:\\d{1,2})")
+        Regex("(\\[?(\\d{1,2}:)?\\d{1,2}:\\d{1,2}([\\.,:]\\d{1,3})?\\]?|\\d{1,2}:\\d{1,2})")
 
     content.lines().forEach { line ->
         val match = timeRegex.find(line)

@@ -7,6 +7,7 @@ class IosPermissionManager : PermissionManager {
     override fun hasMicrophonePermission(): Boolean = true
     override fun requestNotificationPermission() {}
     override fun hasNotificationPermission(): Boolean = true
+    override fun getContext(): Any = Unit
 }
 
 actual fun getPermissionManager(): PermissionManager = IosPermissionManager()

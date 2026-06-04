@@ -331,6 +331,14 @@ try {
         }
     }
 
+    override fun readResourceContent(name: String): String? {
+        return try {
+            context.assets.open(name).bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override fun listFiles(path: String): List<String> {
         return try {
             java.io.File(path).listFiles()?.map { it.absolutePath } ?: emptyList()

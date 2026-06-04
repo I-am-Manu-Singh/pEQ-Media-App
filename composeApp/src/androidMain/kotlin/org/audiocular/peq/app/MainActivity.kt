@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var viewModel: AppViewModel
     private var volumeReceiver: VolumeBroadcastReceiver? = null
+    private var mediaCommandReceiver: BroadcastReceiver? = null
     private var lastVolumeSync = 0L
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +79,20 @@ class MainActivity : ComponentActivity() {
 
         initPermissionManager(this)
         initPersistenceManager(applicationContext)
+
+        // Preload standard physical drum samples for learning drum pads
+        listOf("Kick", "Snare", "Hihat", "Clap", "Crash", "Ride", "Tom", "Perc").forEach { type ->
+            val sampleFile = java.io.File(filesDir, "samples/${type.lowercase()}.wav")
+            if (!sampleFile.exists()) {
+                try {
+                    assets.open("samples/${type.lowercase()}.wav").use { input ->
+                        sampleFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                } catch (e: Exception) {
+                    println("pEQControl: [SAMPLES] Failed to restore $type: ${e.message}")
+                }
+            }
+        }
         org.audiocular.peq.app.ui.components.initSystemWindowManager(this)
         
         val permissions = getPermissionManager()
@@ -95,8 +110,8 @@ class MainActivity : ComponentActivity() {
             persistenceManager = getPersistenceManager(),
             stemSplitter = AndroidpEQStemSplitter(this),
             cloudDownloader = AndroidpEQCloudDownloader(this)
-        )
-        viewModel.apply {
+        ).apply {
+            pEQViewModelProvider.viewModel = this
             scanner = AndroidFileScanner(this@MainActivity)
             onEnterPiP = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -128,8 +143,12 @@ class MainActivity : ComponentActivity() {
         val folderPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let {
                 contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                val path = it.path?.substringAfterLast(":") ?: it.toString()
-                val realPath = "/storage/emulated/0/$path" 
+                val rawPath = it.path?.substringAfterLast(":") ?: it.toString()
+                val realPath = if (rawPath.startsWith("/storage/") || rawPath.startsWith("/sdcard")) {
+                    rawPath
+                } else {
+                    "/storage/emulated/0/$rawPath"
+                }
                 viewModel.addScanFolder(realPath)
             }
         }
@@ -140,26 +159,65 @@ class MainActivity : ComponentActivity() {
 
         val lyricsPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
+                var displayName: String? = null
+                if (it.scheme == "content") {
+                    try {
+                        contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (nameIndex != -1) {
+                                    displayName = cursor.getString(nameIndex)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+                val name = displayName ?: it.path?.substringAfterLast("/") ?: "Lyrics"
                 contentResolver.openInputStream(it)?.use { stream ->
                     val content = stream.bufferedReader().readText()
-                    viewModel.loadExternalLyrics(content, it.toString())
+                    viewModel.loadExternalLyrics(content, name)
                 }
             }
         }
         viewModel.onPickLyricsRequested = {
-            lyricsPickerLauncher.launch(arrayOf("*/*"))
+            lyricsPickerLauncher.launch(arrayOf(
+                "text/plain", 
+                "application/octet-stream", 
+                "text/lrc",
+                "application/x-lrc",
+                "*/*"
+            ))
         }
 
         val subtitlePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
-                // For subtitles, we might just pass the URI if the engine can handle it, 
-                // but for now let's use the path if it's a local file
+                var displayName: String? = null
+                if (it.scheme == "content") {
+                    try {
+                        contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (nameIndex != -1) {
+                                    displayName = cursor.getString(nameIndex)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
                 val path = it.toString()
-                viewModel.loadExternalSubtitle(path)
+                viewModel.loadExternalSubtitle(path, displayName)
             }
         }
         viewModel.onPickSubtitleRequested = {
-            subtitlePickerLauncher.launch(arrayOf("*/*"))
+            subtitlePickerLauncher.launch(arrayOf(
+                "application/x-subrip", 
+                "text/vtt", 
+                "text/plain", 
+                "application/octet-stream",
+                "application/x-srt",
+                "text/srt",
+                "*/*"
+            ))
         }
 
         val chaptersPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -168,21 +226,57 @@ class MainActivity : ComponentActivity() {
             }
         }
         viewModel.onPickChaptersRequested = {
-            chaptersPickerLauncher.launch(arrayOf("*/*"))
+            chaptersPickerLauncher.launch(arrayOf(
+                "text/plain",
+                "application/json",
+                "application/xml",
+                "application/octet-stream",
+                "*/*"
+            ))
         }
 
         val trackPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
-                // Find the media item in the library or create a temp one
                 val path = it.toString()
+                var displayName: String? = null
+                var sizeBytes = 0L
+                var mimeType: String? = null
+
+                if (it.scheme == "content") {
+                    mimeType = contentResolver.getType(it)
+                    try {
+                        contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (nameIndex != -1) {
+                                    displayName = cursor.getString(nameIndex)
+                                }
+                                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                if (sizeIndex != -1) {
+                                    sizeBytes = cursor.getLong(sizeIndex)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                val finalName = displayName ?: path.substringAfterLast("/")
+                val extension = finalName.substringAfterLast(".", "").lowercase()
+                val isVideo = if (mimeType != null) {
+                    mimeType.startsWith("video/")
+                } else {
+                    listOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "ts", "flv", "m4v").contains(extension) ||
+                    path.contains("video", ignoreCase = true)
+                }
+
                 val item = viewModel.mediaLibrary.value.find { it.path == path } ?: pEQMediaItem(
                     id = path.hashCode().toString(),
-                    title = path.substringAfterLast("/"),
+                    title = finalName.substringBeforeLast(".", finalName),
                     subtitle = "External Source",
                     path = path,
-                    type = if (path.lowercase().endsWith(".mp3") || path.lowercase().endsWith(".wav") || path.lowercase().endsWith(".flac")) MediaType.AUDIO else MediaType.VIDEO,
-                    format = path.substringAfterLast(".").uppercase(),
-                    sizeBytes = 0L,
+                    type = if (isVideo) MediaType.VIDEO else MediaType.AUDIO,
+                    format = if (extension.isNotEmpty()) extension.uppercase() else (if (isVideo) "VIDEO" else "AUDIO"),
+                    sizeBytes = sizeBytes,
                     durationMs = 0L
                 )
                 viewModel.enqueueSplitJob(item)
@@ -211,7 +305,30 @@ class MainActivity : ComponentActivity() {
         startHardwareMonitoring()
         startSystemSync()
         registerVolumeReceiver()
-        // viewModel.start()
+        registerMediaCommandReceiver()
+        viewModel.start()
+    }
+
+    private fun registerMediaCommandReceiver() {
+        val commandFilter = IntentFilter().apply {
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_NEXT")
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_PREV")
+        }
+        mediaCommandReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (::viewModel.isInitialized) {
+                    when (intent?.action) {
+                        "org.audiocular.peq.app.ACTION_SYSTEM_NEXT" -> viewModel.nextTrack()
+                        "org.audiocular.peq.app.ACTION_SYSTEM_PREV" -> viewModel.previousTrack()
+                    }
+                }
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaCommandReceiver, commandFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(mediaCommandReceiver, commandFilter)
+        }
     }
 
     private fun registerVolumeReceiver() {
@@ -328,13 +445,64 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> {
                 val uri = intent.data
                 if (uri != null) {
-                    val path = if (uri.scheme == "file") uri.path else uri.toString()
+                    val path = when (uri.scheme) {
+                        "file" -> uri.path
+                        "content" -> uri.toString()
+                        else -> uri.toString()
+                    }
                     path?.let {
-                        lifecycleScope.launch {
-                            delay(500) // Small delay for engine stabilization
-                            viewModel.playExternalFile(it)
-                            println("pEQControl: [SYSTEM] Playing external intent: $it")
+                        var displayName: String? = null
+                        var sizeBytes: Long? = null
+                        var mimeType: String? = null
+
+                        if (uri.scheme == "content") {
+                            mimeType = contentResolver.getType(uri)
+                            try {
+                                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                                    if (cursor.moveToFirst()) {
+                                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                        if (nameIndex != -1) {
+                                            displayName = cursor.getString(nameIndex)
+                                        }
+                                        val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                        if (sizeIndex != -1) {
+                                            sizeBytes = cursor.getLong(sizeIndex)
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                println("pEQControl: [SYSTEM] Failed to query content URI metadata: ${e.message}")
+                            }
+                        } else if (uri.scheme == "file") {
+                            try {
+                                val file = java.io.File(uri.path ?: "")
+                                if (file.exists()) {
+                                    displayName = file.name
+                                    sizeBytes = file.length()
+                                    mimeType = java.net.URLConnection.guessContentTypeFromName(file.name)
+                                }
+                            } catch (e: Exception) {
+                                println("pEQControl: [SYSTEM] Failed to query file URI metadata: ${e.message}")
+                            }
                         }
+
+                        lifecycleScope.launch {
+                            delay(600) // Engine stabilization
+                            viewModel.playExternalFile(
+                                path = it,
+                                displayName = displayName,
+                                mimeType = mimeType,
+                                sizeBytes = sizeBytes
+                            )
+                        }
+                    }
+                }
+            }
+            Intent.ACTION_SEND -> {
+                if ("text/plain" == intent.type) {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
+                        viewModel.handleSharedUrl(sharedText)
+                        println("pEQControl: [SYSTEM] Captured shared text: $sharedText")
                     }
                 }
             }
@@ -469,13 +637,50 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (::viewModel.isInitialized) {
+            viewModel.isAppInBackground.value = true
+            // Only show overlay if playing and lyrics are enabled
+            if (viewModel.isPlaying.value && viewModel.isLyricsVisible.value) {
+                startService(Intent(this, org.audiocular.peq.app.services.pEQOverlayService::class.java))
+            }
+        }
         org.audiocular.peq.app.ui.components.releaseBrightness()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        if (::viewModel.isInitialized) {
+            viewModel.isAppInBackground.value = false
+            stopService(Intent(this, org.audiocular.peq.app.services.pEQOverlayService::class.java))
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         volumeReceiver?.let {
             runCatching { unregisterReceiver(it) }
+        }
+        mediaCommandReceiver?.let {
+            runCatching { unregisterReceiver(it) }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1001) {
+            val granted = grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }
+            if (granted) {
+                println("pEQControl: [SYSTEM] Media permissions granted, refreshing scanner")
+                if (::viewModel.isInitialized) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        viewModel.scanner?.refresh()
+                    }
+                }
+            }
         }
     }
 }

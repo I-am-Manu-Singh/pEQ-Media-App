@@ -97,10 +97,45 @@ class pEQMediaSessionService : MediaSessionService() {
 
         player = createPlayer()
 
+        val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(player) {
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands().buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
+            }
+
+            override fun isCommandAvailable(command: Int): Boolean {
+                return command == Player.COMMAND_SEEK_TO_NEXT ||
+                       command == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
+                       command == Player.COMMAND_SEEK_TO_PREVIOUS ||
+                       command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM ||
+                       super.isCommandAvailable(command)
+            }
+
+            override fun seekToNext() {
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_NEXT"))
+            }
+
+            override fun seekToNextMediaItem() {
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_NEXT"))
+            }
+
+            override fun seekToPrevious() {
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PREV"))
+            }
+
+            override fun seekToPreviousMediaItem() {
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PREV"))
+            }
+        }
+
         mediaSession =
             MediaSession.Builder(
                 this,
-                player
+                forwardingPlayer
             ).build()
 
         updateWidgetMetadata()
@@ -199,11 +234,11 @@ class pEQMediaSessionService : MediaSessionService() {
             }
 
             ACTION_NEXT -> {
-                player.seekToNext()
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_NEXT"))
             }
 
             ACTION_PREV -> {
-                player.seekToPrevious()
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PREV"))
             }
 
             ACTION_REPLAY_10 -> {
@@ -227,7 +262,7 @@ class pEQMediaSessionService : MediaSessionService() {
             }
 
             ACTION_REPEAT -> {
-                val next = (player.repeatMode + 1) % 4 // OFF, ALL, ONE, FOLDER
+                val next = (player.repeatMode + 1) % 3 // OFF, ONE, ALL
                 player.repeatMode = next
                 updateWidgetMetadata()
             }
@@ -340,6 +375,24 @@ class pEQMediaSessionService : MediaSessionService() {
                         PendingIntent.FLAG_IMMUTABLE
             )
 
+        val metadata = player.currentMediaItem?.mediaMetadata
+        val artworkData = metadata?.artworkData
+        val artworkUri = metadata?.artworkUri
+
+        val artworkBitmap = artworkData?.let {
+            try {
+                BitmapFactory.decodeByteArray(it, 0, it.size)
+            } catch (_: Exception) { null }
+        } ?: artworkUri?.let { uri ->
+            try {
+                if (uri.scheme == "content" || uri.scheme == "file") {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                } else null
+            } catch (_: Exception) { null }
+        }
+
         return NotificationCompat.Builder(
             this,
             CHANNEL_ID
@@ -347,6 +400,7 @@ class pEQMediaSessionService : MediaSessionService() {
             .setSmallIcon(
                 R.drawable.ic_music
             )
+            .setLargeIcon(artworkBitmap)
             .setContentTitle(
                 player.currentMediaItem
                     ?.mediaMetadata
@@ -363,7 +417,7 @@ class pEQMediaSessionService : MediaSessionService() {
                 contentIntent
             )
             .setOnlyAlertOnce(true)
-            .setOngoing(player.isPlaying)
+            .setOngoing(true)
             .setCategory(
                 NotificationCompat.CATEGORY_TRANSPORT
             )
@@ -799,6 +853,13 @@ class pEQMediaSessionService : MediaSessionService() {
     /*
      * destroy
      */
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = mediaSession?.player
+        if (player == null || !player.playWhenReady || player.playbackState == Player.STATE_ENDED || player.playbackState == Player.STATE_IDLE) {
+            stopSelf()
+        }
+    }
 
     override fun onDestroy() {
 

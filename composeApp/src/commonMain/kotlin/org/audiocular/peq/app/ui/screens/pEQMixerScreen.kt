@@ -21,6 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import kotlinx.coroutines.launch
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.pEQMediaItem
@@ -91,29 +95,9 @@ fun pEQMixerScreen(
                 Arrangement.spacedBy(18.dp)
         ) {
 
-            /*
-             * HEADER
-             */
+        
 
-            item {
-
-                MixerTopBar(
-                    viewModel = viewModel,
-                    primaryColor = primaryColor
-                )
-            }
-
-            /*
-             * NOW PLAYING STRIP
-             */
-
-            item {
-
-                CompactTransportBanner(
-                    viewModel = viewModel
-                )
-            }
-
+         
             /*
              * MONITORING
              */
@@ -170,86 +154,7 @@ fun pEQMixerScreen(
     }
 }
 
-@Composable
-private fun MixerTopBar(
-    viewModel: AppViewModel,
-    primaryColor: Color
-) {
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-
-        horizontalArrangement =
-            Arrangement.SpaceBetween,
-
-        verticalAlignment =
-            Alignment.CenterVertically
-    ) {
-
-        Column {
-
-            Text(
-                text = "pEQ NEURAL MIXER",
-
-                fontSize = 13.sp,
-
-                fontWeight = FontWeight.Black,
-
-                color = primaryColor,
-
-                letterSpacing = 3.sp
-            )
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text =
-                    "REALTIME STEM ENGINE • JNI DSP • ONNX",
-
-                fontSize = 10.sp,
-
-                fontWeight = FontWeight.Bold,
-
-                color =
-                    MaterialTheme.colorScheme
-                        .onSurface
-                        .copy(alpha = 0.38f),
-
-                letterSpacing = 1.sp
-            )
-        }
-
-        Row(
-            horizontalArrangement =
-                Arrangement.spacedBy(10.dp)
-        ) {
-
-            FilledTonalIconButton(
-                onClick = {
-                    viewModel.startStemSplit()
-                },
-
-                colors =
-                    IconButtonDefaults
-                        .filledTonalIconButtonColors(
-                            containerColor =
-                                primaryColor.copy(alpha = 0.12f)
-                        )
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.AutoGraph,
-
-                    contentDescription = null,
-
-                    tint = primaryColor
-                )
-            }
-
-        }
-    }
-}
 
 @Composable
 private fun CompactTransportBanner(
@@ -491,80 +396,79 @@ private fun MasterMonitoringSection(
                     primaryColor = primaryColor
                 )
 
-            viewModel.activeJob.value?.let { job ->
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-
-                    color =
-                        primaryColor.copy(alpha = 0.06f),
-
-                    border = BorderStroke(
-                        1.dp,
-                        primaryColor.copy(alpha = 0.08f)
-                    )
-                ) {
-
-                    Column(
-                        modifier = Modifier.padding(14.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                viewModel.backgroundJobs.forEach { job ->
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = primaryColor.copy(alpha = 0.06f),
+                        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.08f))
                     ) {
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-
-                            horizontalArrangement =
-                                Arrangement.SpaceBetween
-                        ) {
-
-                            Text(
-                                text = job.name,
-
-                                fontSize = 10.sp,
-
-                                fontWeight =
-                                    FontWeight.Black,
-
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = job.name, fontSize = 10.sp, fontWeight = FontWeight.Black, color = primaryColor)
+                                Text(text = "${(job.progress * 100).toInt()}%", fontSize = 10.sp, fontWeight = FontWeight.Black, color = primaryColor)
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            LinearProgressIndicator(
+                                progress = { job.progress },
+                                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
                                 color = primaryColor
                             )
-
-                            Text(
-                                text =
-                                    "${(job.progress * 100).toInt()}%",
-
-                                fontSize = 10.sp,
-
-                                fontWeight =
-                                    FontWeight.Black,
-
-                                color = primaryColor
-                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(text = job.status, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
                         }
+                    }
+                }
+            }
 
-                        Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(14.dp))
 
+            MixerSectionCard(
+                title = "DJ AUTO-TRANSITION",
+                icon = Icons.Default.Transform,
+                info = "Perform smooth crossfading transitions to the next queue item."
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "CROSSFADER BLEND", fontSize = 10.sp, fontWeight = FontWeight.Black, color = primaryColor)
+                        Text(text = if (viewModel.isCrossfading.value) "TRANSITIONING..." else "READY", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(Modifier.height(10.dp))
+                    
+                    if (viewModel.isCrossfading.value) {
                         LinearProgressIndicator(
-                            progress = { job.progress },
-
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(CircleShape),
-
+                            progress = { viewModel.crossfadeProgress.value },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
                             color = primaryColor
                         )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = job.status,
-
-                            fontSize = 9.sp,
-
-                            color =
-                                MaterialTheme.colorScheme
-                                    .onSurface
-                                    .copy(alpha = 0.42f)
+                    } else {
+                        Slider(
+                            value = viewModel.crossfadeProgress.value,
+                            onValueChange = {},
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = primaryColor,
+                                activeTrackColor = primaryColor
+                            )
                         )
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = { viewModel.startCrossfade() },
+                        enabled = !viewModel.isCrossfading.value && viewModel.playbackQueue.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FlashOn, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = "TRIGGER AUTO-CROSSFADE", fontSize = 11.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -597,10 +501,72 @@ private fun StemConsoleSection(
         info = "Realtime isolated neural stem balancing."
     ) {
 
-        /*
-         * FIXED GRID LAYOUT
-         * No horizontal scrolling circus anymore.
-         */
+        LazyRow(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                SuggestionChip(
+                    onClick = {
+                        activeStems.forEach { stem ->
+                            viewModel.stemVolumes[stem] = 1.0f
+                            viewModel.stemMutes[stem] = false
+                            viewModel.stemSolos[stem] = false
+                            viewModel.audioEngine.updateStemVolume(stem, 1.0f)
+                        }
+                        viewModel.showToast("Bypass: Reset Stems")
+                    },
+                    label = { Text("Bypass Reset", fontSize = 10.sp) }
+                )
+            }
+            item {
+                SuggestionChip(
+                    onClick = {
+                        activeStems.forEach { stem ->
+                            val vol = if (stem == "vocals") 1.2f else 0.0f
+                            viewModel.stemVolumes[stem] = if (stem == "vocals") 1.2f else 1.0f
+                            viewModel.stemMutes[stem] = (stem != "vocals")
+                            viewModel.stemSolos[stem] = (stem == "vocals")
+                            viewModel.audioEngine.updateStemVolume(stem, vol)
+                        }
+                        viewModel.showToast("Acappella Focus Active")
+                    },
+                    label = { Text("Acappella Solo", fontSize = 10.sp) }
+                )
+            }
+            item {
+                SuggestionChip(
+                    onClick = {
+                        activeStems.forEach { stem ->
+                            val vol = if (stem == "vocals") 0.0f else 1.0f
+                            viewModel.stemVolumes[stem] = vol
+                            viewModel.stemMutes[stem] = (stem == "vocals")
+                            viewModel.stemSolos[stem] = false
+                            viewModel.audioEngine.updateStemVolume(stem, vol)
+                        }
+                        viewModel.showToast("Karaoke Mode Active")
+                    },
+                    label = { Text("Karaoke Mode", fontSize = 10.sp) }
+                )
+            }
+            item {
+                SuggestionChip(
+                    onClick = {
+                        activeStems.forEach { stem ->
+                            val vol = if (stem == "drums" || stem == "bass") 1.2f else 0.3f
+                            viewModel.stemVolumes[stem] = vol
+                            viewModel.stemMutes[stem] = false
+                            viewModel.stemSolos[stem] = false
+                            viewModel.audioEngine.updateStemVolume(stem, vol)
+                        }
+                        viewModel.showToast("Rhythm Section Focus")
+                    },
+                    label = { Text("Rhythm Focus", fontSize = 10.sp) }
+                )
+            }
+        }
+
+      
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(480.dp)) {
             val isWide = maxWidth > 800.dp
@@ -793,20 +759,17 @@ fun StemFaderColumn(
              * PAN
              */
 
-            Slider(
+            Text(
+                text = "PAN",
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+            )
+            Spacer(Modifier.height(4.dp))
+            PanKnob(
                 value = pan,
-
                 onValueChange = onPanChange,
-
-                valueRange = -1f..1f,
-
-                modifier = Modifier.width(42.dp),
-
-                colors = SliderDefaults.colors(
-                    thumbColor = primary,
-                    activeTrackColor =
-                        primary.copy(alpha = 0.3f)
-                )
+                modifier = Modifier.size(36.dp)
             )
 
             Spacer(Modifier.height(14.dp))
@@ -818,7 +781,7 @@ fun StemFaderColumn(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .width(40.dp),
+                    .width(48.dp),
 
                 contentAlignment =
                     Alignment.Center
@@ -826,7 +789,7 @@ fun StemFaderColumn(
 
                 Box(
                     modifier = Modifier
-                        .width(6.dp)
+                        .width(8.dp)
                         .fillMaxHeight()
                         .clip(CircleShape)
                         .background(
@@ -1156,6 +1119,68 @@ private fun NeuralStemPipeline(
                     color = primaryColor
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun PanKnob(
+    value: Float, // -1f to 1f
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 36.dp
+) {
+    var dragAccumulator by remember { mutableStateOf(0f) }
+    
+    Box(
+        modifier = modifier
+            .size(size)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { dragAccumulator = 0f },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragAccumulator -= dragAmount.y
+                        val delta = dragAccumulator / 150f
+                        val newValue = (value + delta).coerceIn(-1f, 1f)
+                        onValueChange(newValue)
+                        dragAccumulator = 0f
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.toPx() / 2f, size.toPx() / 2f)
+            val radius = size.toPx() / 2f
+            
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.4f),
+                radius = radius,
+                center = center
+            )
+            
+            drawCircle(
+                color = Color.White.copy(alpha = 0.1f),
+                radius = radius,
+                center = center,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+            )
+            
+            val angleDegrees = value * 135f
+            val angleRadians = (angleDegrees - 90f) * (kotlin.math.PI.toFloat() / 180f)
+            
+            val lineLength = radius * 0.7f
+            val endX = center.x + (lineLength * kotlin.math.cos(angleRadians))
+            val endY = center.y + (lineLength * kotlin.math.sin(angleRadians))
+            
+            drawLine(
+                color = Color.Cyan,
+                start = center,
+                end = Offset(endX, endY),
+                strokeWidth = 4f,
+                cap = StrokeCap.Round
+            )
         }
     }
 }

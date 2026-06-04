@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.consumePositionChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -151,7 +150,7 @@ fun MetadataEditorContent(
         mutableStateOf(false)
     }
 
-    val currentLyric = viewModel.syncedLyrics.getOrNull(viewModel.currentLyricsLine.value)
+
 
     val currentPosition =
         viewModel.currentPosition.value
@@ -2794,223 +2793,51 @@ fun LyricsWebView(
             }
 
             // =========================
-            // CONTENT CARD
+            // =========================
+            // WEB VIEW CONTENT
+            // =========================
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            ) {
+                pEQWebView(
+                    url = url,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            
+            // =========================
+            // QUICK ACTIONS (Copy/Paste)
             // =========================
 
-            ElevatedCard(
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth(),
-
-                shape =
-                    RoundedCornerShape(28.dp),
-
-                colors =
-                    CardDefaults.elevatedCardColors(
-
-                        containerColor =
-                            MaterialTheme.colorScheme
-                                .surfaceContainer
-                    ),
-
-                elevation =
-                    CardDefaults.elevatedCardElevation(
-                        defaultElevation = 2.dp
-                    )
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp)
+                Button(
+                    onClick = { /* Implement auto-grab if possible or just hint */ },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-
-                    // =========================
-                    // URL BOX
-                    // =========================
-
-                    Surface(
-                        modifier =
-                            Modifier.fillMaxWidth(),
-
-                        shape =
-                            RoundedCornerShape(18.dp),
-
-                        color =
-                            MaterialTheme.colorScheme
-                                .surfaceContainerHighest
-                    ) {
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 14.dp,
-                                    vertical = 12.dp
-                                ),
-
-                            verticalAlignment =
-                                Alignment.CenterVertically
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Link,
-
-                                contentDescription = null,
-
-                                tint =
-                                    MaterialTheme.colorScheme
-                                        .primary,
-
-                                modifier =
-                                    Modifier.size(16.dp)
-                            )
-
-                            Spacer(
-                                Modifier.width(10.dp)
-                            )
-
-                            Text(
-                                text = url,
-
-                                modifier =
-                                    Modifier.weight(1f),
-
-                                maxLines = 1,
-
-                                overflow =
-                                    TextOverflow.Ellipsis,
-
-                                fontSize = 12.sp,
-
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Spacer(
-                        Modifier.height(18.dp)
-                    )
-
-                    // =========================
-                    // INFO
-                    // =========================
-
-                    Row(
-                        verticalAlignment =
-                            Alignment.Top
-                    ) {
-
-                        Surface(
-                            modifier =
-                                Modifier.size(34.dp),
-
-                            shape =
-                                RoundedCornerShape(12.dp),
-
-                            color =
-                                MaterialTheme.colorScheme
-                                    .primary
-                                    .copy(alpha = 0.10f)
-                        ) {
-
-                            Box(
-                                contentAlignment =
-                                    Alignment.Center
-                            ) {
-
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.ContentPaste,
-
-                                    contentDescription = null,
-
-                                    tint =
-                                        MaterialTheme.colorScheme
-                                            .primary,
-
-                                    modifier =
-                                        Modifier.size(16.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(
-                            Modifier.width(12.dp)
-                        )
-
-                        Column {
-
-                            Text(
-                                text =
-                                    "Paste into plain mode",
-
-                                fontSize = 13.sp,
-
-                                fontWeight =
-                                    FontWeight.SemiBold
-                            )
-
-                            Spacer(
-                                Modifier.height(4.dp)
-                            )
-
-                            Text(
-                                text =
-                                    "Copy synced or plain lyrics from the website and paste them into the editor.",
-
-                                fontSize = 11.sp,
-
-                                lineHeight = 16.sp,
-
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Spacer(
-                        Modifier.height(20.dp)
-                    )
-
-                    // =========================
-                    // ACTION BUTTON
-                    // =========================
-
-                    FilledTonalButton(
-                        onClick = {
-
-                            // open url externally
-                        },
-
-                        modifier =
-                            Modifier.fillMaxWidth(),
-
-                        shape =
-                            RoundedCornerShape(18.dp)
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.OpenInBrowser,
-
-                            contentDescription = null,
-
-                            modifier =
-                                Modifier.size(18.dp)
-                        )
-
-                        Spacer(
-                            Modifier.width(8.dp)
-                        )
-
-                        Text(
-                            text = "Open Website"
-                        )
-                    }
+                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("SYNC FROM WEB", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("CLOSE BROWSER", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 

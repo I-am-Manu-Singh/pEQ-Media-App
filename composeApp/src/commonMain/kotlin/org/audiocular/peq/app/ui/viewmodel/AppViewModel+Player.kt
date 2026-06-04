@@ -44,23 +44,50 @@ fun AppViewModel.togglePlayback() {
     isPlaying.value = !isPlaying.value
 }
 
-fun AppViewModel.playExternalFile(path: String) {
-    val fileName = path.substringAfterLast("/").substringBeforeLast(".")
-    val extension = path.substringAfterLast(".").lowercase()
-    val isVideo = listOf("mp4", "mkv", "webm", "mov", "avi", "3gp").contains(extension)
+fun AppViewModel.playExternalFile(
+    path: String,
+    displayName: String? = null,
+    mimeType: String? = null,
+    sizeBytes: Long? = null
+) {
+    val decodedDisplayName = if (displayName != null) {
+        displayName
+    } else {
+        path.substringAfterLast("/").substringBeforeLast(".")
+    }
+    
+    val extension = if (displayName != null) {
+        displayName.substringAfterLast(".", "").lowercase()
+    } else {
+        path.substringAfterLast(".").lowercase()
+    }
+
+    val isVideo = if (mimeType != null) {
+        mimeType.startsWith("video/")
+    } else {
+        listOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "ts", "flv", "m4v").contains(extension) || 
+        path.contains("video", ignoreCase = true) || 
+        path.contains("DCIM", ignoreCase = true)
+    }
     
     val item = pEQMediaItem(
         id = "external_${path.hashCode()}",
-        title = fileName,
+        title = decodedDisplayName.substringBeforeLast(".", decodedDisplayName),
         subtitle = "External Source",
         path = path,
         type = if (isVideo) MediaType.VIDEO else MediaType.AUDIO,
-        format = extension.uppercase(),
-        sizeBytes = 0L,
+        format = if (extension.isNotEmpty()) extension.uppercase() else (if (isVideo) "VIDEO" else "AUDIO"),
+        sizeBytes = sizeBytes ?: 0L,
         durationMs = 0L
     )
     
     playMediaItem(item, addToQueue = true)
+    
+    // Explicitly set player tab and handle video fullscreen if needed
+    currentTab.value = Tab.Player
+    if (isVideo) {
+        isVideoFullScreen.value = true
+    }
 }
 
 fun AppViewModel.nextTrack() {
@@ -108,7 +135,6 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
         audioEngine.playTrack(playPath, item.title, item.artist, item.thumbnail)
         isPlaying.value = true
 
-        // 📝 Industrial Lyric Resolution
         if (!item.lyrics.isNullOrBlank()) {
             syncedLyrics.clear()
             syncedLyrics.addAll(parseLrcInternal(item.lyrics))
@@ -122,11 +148,14 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
         }
     }
     
-    if (addToQueue && !playbackQueue.any { it.path == item.path }) {
-        playbackQueue.add(0, item)
-        setCurrentQueueIndex(0)
-    } else if (addToQueue) {
-         setCurrentQueueIndex(playbackQueue.indexOfFirst { it.path == item.path })
+    if (addToQueue) {
+        val existingIndex = playbackQueue.indexOfFirst { it.path == item.path }
+        if (existingIndex == -1) {
+            playbackQueue.add(0, item)
+            setCurrentQueueIndex(0)
+        } else {
+            setCurrentQueueIndex(existingIndex)
+        }
     }
 
     if (!recentlyPlayedItems.any { it.path == item.path }) {
@@ -136,7 +165,23 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
     
     updateMostPlayed(item)
     currentTab.value = Tab.Player
+    
+    // If video, enter immersive mode immediately
+    if (item.type == MediaType.VIDEO) {
+        isVideoFullScreen.value = true
+    } else {
+        isVideoFullScreen.value = false
+    }
+    
     persistSession()
+}
+
+fun AppViewModel.playMediaItemFromQueue(index: Int) {
+    if (index in playbackQueue.indices) {
+        val item = playbackQueue[index]
+        setCurrentQueueIndex(index)
+        playMediaItem(item, addToQueue = false)
+    }
 }
 
 // Mixer Extensions
@@ -187,8 +232,14 @@ fun AppViewModel.onTrackLoaded() {
         val engineMetadata = audioEngine.getEmbeddedMetadata()
         currentMediaItem.value = currentMediaItem.value?.copy(
             bitrate = engineMetadata.availableTracks.firstOrNull { it.type == TrackType.AUDIO }?.codec?.toIntOrNull() ?: 0,
-            codec = engineMetadata.availableTracks.firstOrNull { it.type == TrackType.AUDIO }?.codec
+            codec = audioEngine.getCodec(),
+            sampleRate = audioEngine.getSampleRate(),
+            bitDepth = audioEngine.getBitDepth()
         )
+        currentSampleRate.value = audioEngine.getSampleRate()
+        currentBitDepth.value = audioEngine.getBitDepth()
+        currentCodec.value = audioEngine.getCodec()
+
         delay(500)
         refreshAvailableTracks()
         val tracks = audioEngine.getAvailableTracks()
@@ -198,6 +249,7 @@ fun AppViewModel.onTrackLoaded() {
         }
         delay(1500)
         refreshAvailableTracks()
+        analyzeCurrentTrack() // 🧠 Auto-sync workstation telemetry
         persistSession()
     }
 }
@@ -404,10 +456,11 @@ fun AppViewModel.requestLyricsPicker(onDone: () -> Unit = {}) { onPickLyricsRequ
 fun AppViewModel.requestSubtitlePicker() { onPickSubtitleRequested?.invoke() }
 fun AppViewModel.requestChapterPicker() { onPickChaptersRequested?.invoke() }
 
-fun AppViewModel.loadExternalSubtitle(path: String) {
+fun AppViewModel.loadExternalSubtitle(path: String, displayName: String? = null) {
     scope.launch {
         audioEngine.addExternalSubtitle(path)
-        showToast("Subtitle Linked: ${path.substringAfterLast("/")}")
+        val nameToShow = displayName ?: path.substringAfterLast("/")
+        showToast("Subtitle Linked: $nameToShow")
     }
 }
 

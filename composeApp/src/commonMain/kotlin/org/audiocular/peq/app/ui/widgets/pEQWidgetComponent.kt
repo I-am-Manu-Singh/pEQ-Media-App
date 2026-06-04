@@ -1,25 +1,24 @@
 package org.audiocular.peq.app.ui.widgets
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.*
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.data.pEQMediaItem
@@ -34,471 +33,323 @@ fun pEQWidgetCommand(
     onPrev: () -> Unit,
     onLaunch: () -> Unit,
     modifier: Modifier = Modifier,
-    progress: Float = 0.68f,
+    progress: Float = 0f,
+    duration: Long = 0L,
+    currentPosition: Long = 0L,
     isFavorite: Boolean = false,
-    isShuffleEnabled: Boolean = false
+    isShuffleEnabled: Boolean = false,
+    queue: List<pEQMediaItem> = emptyList(),
+    onQueueItemClick: (pEQMediaItem) -> Unit = {},
+    onFavoriteToggle: () -> Unit = {}
 ) {
+    // Dynamic background color derived from current track metadata to match album art
+    val dominantColor = remember(item) {
+        if (item == null) {
+            Color(0xFF2C0B3E) // Premium deep violet/plum fallback
+        } else {
+            val hash = (item.title + item.artist).hashCode()
+            val r = ((hash and 0xFF0000) shr 16) % 30 + 35  // 35-65 (deep red/plum)
+            val g = ((hash and 0x00FF00) shr 8) % 15 + 10    // 10-25 (dark green/blue)
+            val b = (hash and 0x0000FF) % 35 + 45            // 45-80 (medium blue/violet)
+            Color(r, g, b)
+        }
+    }
 
-    // =========================================================
-    // ANIMATION
-    // =========================================================
+    val cyanAccent = Color(0xFF00E5FF)
+    val mutedCyan = Color(0xFF80DEEA)
 
-    val infiniteTransition =
-        rememberInfiniteTransition(
-            label = "widget_transition"
-        )
-
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 0.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 2600,
-                easing = EaseInOut
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_alpha"
-    )
-
-    val playScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.04f else 1f,
-        animationSpec = tween(300),
-        label = "play_scale"
-    )
-
-    // =========================================================
-    // ROOT
-    // =========================================================
-
-    Surface(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(128.dp)
-            .clip(RoundedCornerShape(30.dp))
             .clickable(
-                interactionSource = remember {
-                    MutableInteractionSource()
-                },
+                interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
                 onLaunch()
             },
-
-        shape = RoundedCornerShape(30.dp),
-
-        color = Color(0xFF090909),
-
-        border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.06f)
-        ),
-
-        tonalElevation = 12.dp,
-
-        shadowElevation = 18.dp
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-
-        Box(
-            modifier = Modifier.fillMaxSize()
+        // =========================================================
+        // CARD 1: PLAYER CARD
+        // =========================================================
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = dominantColor,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
         ) {
-
-            // =====================================================
-            // BACKGROUND
-            // =====================================================
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF111111),
-                                Color(0xFF070707)
-                            )
-                        )
-                    )
-            )
-
-            // =====================================================
-            // YELLOW GLOW
-            // =====================================================
-
-            Box(
-                modifier = Modifier
-                    .size(220.dp)
-                    .offset(
-                        x = 170.dp,
-                        y = (-90).dp
-                    )
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFFFFD600)
-                                    .copy(alpha = glowAlpha),
-
-                                Color.Transparent
-                            )
-                        ),
-                        shape = CircleShape
-                    )
-            )
-
-            // =====================================================
-            // MAIN CONTENT
-            // =====================================================
-
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        horizontal = 14.dp,
-                        vertical = 14.dp
-                    ),
-
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(12.dp)
             ) {
-
-                // =================================================
-                // ARTWORK
-                // =================================================
-
-                Box {
-
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Album Art on the left
                     Surface(
-                        modifier = Modifier.size(84.dp),
-
-                        shape = RoundedCornerShape(24.dp),
-
-                        color = Color(0xFF161616),
-
-                        border = BorderStroke(
-                            1.dp,
-                            Color.White.copy(alpha = 0.04f)
-                        )
+                        modifier = Modifier.size(54.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.3f)
                     ) {
-
-                        if (item?.thumbnail != null) {
-
-                            pEQImage(
-                                data = item.thumbnail,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                                mediaType = item.type
-                            )
-
-                        } else {
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(
-                                                Color(0xFF1A1A1A),
-                                                Color(0xFF101010)
-                                            )
-                                        )
-                                    ),
-
-                                contentAlignment = Alignment.Center
-                            ) {
-
-                                Icon(
-                                    imageVector =
-                                        Icons.AutoMirrored.Filled.VolumeUp,
-
-                                    contentDescription = null,
-
-                                    tint = Color(0xFFFFD600),
-
-                                    modifier = Modifier.size(34.dp)
-                                )
-                            }
-                        }
+                        pEQImage(
+                            data = item?.thumbnail,
+                            fallbackPath = item?.path,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            mediaType = item?.type
+                        )
                     }
 
-                    // =================================================
-                    // PLAYING DOT
-                    // =================================================
-
-                    Box(
+                    // Metadata Centered
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(
-                                x = (-3).dp,
-                                y = 3.dp
-                            )
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isPlaying) {
-                                    Color(0xFF00FF9D)
-                                } else {
-                                    Color.DarkGray
-                                }
-                            )
-                    )
+                            .weight(1f)
+                            .padding(horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = item?.title ?: "pEQ Station",
+                            color = cyanAccent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = item?.artist ?: "Ready for Neural Input",
+                            color = mutedCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
 
-                Spacer(
-                    modifier = Modifier.width(16.dp)
-                )
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // =================================================
-                // RIGHT SIDE
-                // =================================================
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center
+                // Transport Control Strip
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    // =============================================
-                    // TITLE
-                    // =============================================
-
-                    Text(
-                        text =
-                            item?.title
-                                ?: "pEQ Neural Engine",
-
-                        color = Color.White,
-
-                        fontSize = 15.sp,
-
-                        fontWeight = FontWeight.Bold,
-
-                        maxLines = 1,
-
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(4.dp)
-                    )
-
-                    // =============================================
-                    // ARTIST
-                    // =============================================
-
-                    Text(
-                        text =
-                            item?.artist
-                                ?: "Industrial Audio Core",
-
-                        color = Color(0xFFFFD600),
-
-                        fontSize = 11.sp,
-
-                        fontWeight = FontWeight.Medium,
-
-                        maxLines = 1,
-
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(16.dp)
-                    )
-
-                    // =============================================
-                    // CONTROLS
-                    // =============================================
-
-                    Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                    // Favorite Toggle
+                    IconButton(
+                        onClick = onFavoriteToggle,
+                        modifier = Modifier.size(36.dp)
                     ) {
-
-                        WidgetIconButton(
-                            icon =
-                                if (isFavorite) {
-                                    Icons.Default.Favorite
-                                } else {
-                                    Icons.Default.FavoriteBorder
-                                },
-
-                            tint = Color(0xFFFF5A7A)
-                        ) {
-                        }
-
-                        Spacer(
-                            modifier = Modifier.width(10.dp)
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(18.dp)
                         )
+                    }
 
-                        WidgetIconButton(
-                            icon = Icons.Default.SkipPrevious
-                        ) {
-                            onPrev()
-                        }
-
-                        Spacer(
-                            modifier = Modifier.width(10.dp)
+                    // Skip Previous
+                    IconButton(
+                        onClick = onPrev,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = "Previous",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(20.dp)
                         )
+                    }
 
-                        // =========================================
-                        // PLAY BUTTON
-                        // =========================================
-
-                        Surface(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .graphicsLayer {
-                                    scaleX = playScale
-                                    scaleY = playScale
-                                },
-
-                            shape = CircleShape,
-
-                            color = Color(0xFFFFD600),
-
-                            shadowElevation = 10.dp,
-
-                            onClick = onTogglePlayback
-                        ) {
-
-                            Box(
-                                contentAlignment =
-                                    Alignment.Center
-                            ) {
-
-                                Icon(
-                                    imageVector =
-                                        if (isPlaying) {
-                                            Icons.Default.Pause
-                                        } else {
-                                            Icons.Default.PlayArrow
-                                        },
-
-                                    contentDescription = null,
-
-                                    tint = Color.Black,
-
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(
-                            modifier = Modifier.width(10.dp)
+                    // Fast Rewind
+                    IconButton(
+                        onClick = { /* simulated rewind / skip back */ },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FastRewind,
+                            contentDescription = "Rewind",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(18.dp)
                         )
+                    }
 
-                        WidgetIconButton(
-                            icon = Icons.Default.SkipNext
-                        ) {
-                            onNext()
-                        }
-
-                        Spacer(
-                            modifier = Modifier.width(10.dp)
+                    // Play/Pause
+                    IconButton(
+                        onClick = onTogglePlayback,
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(24.dp)
                         )
+                    }
 
-                        WidgetIconButton(
-                            icon = Icons.Default.Shuffle,
+                    // Fast Forward
+                    IconButton(
+                        onClick = { /* simulated fast forward */ },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FastForward,
+                            contentDescription = "Fast Forward",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
 
-                            tint =
-                                if (isShuffleEnabled) {
-                                    Color.White
-                                } else {
-                                    Color(0xFFFFD600)
-                                }
-                        ) {
-                        }
+                    // Skip Next
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "Next",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Queue/Playlist icon
+                    IconButton(
+                        onClick = onLaunch,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = "Queue",
+                            tint = cyanAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
+        }
 
-            // =====================================================
-            // PROGRESS
-            // =====================================================
+        // =========================================================
+        // CARD 2: CURRENT QUEUE CARD
+        // =========================================================
+        if (queue.isNotEmpty()) {
+            val activeIndex = remember(item, queue) {
+                queue.indexOfFirst { it.id == item?.id }.coerceAtLeast(0)
+            }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
+            Surface(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                shape = RoundedCornerShape(20.dp),
+                color = dominantColor,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
             ) {
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .background(
-                            Color.White.copy(alpha = 0.05f)
-                        )
+                Column(
+                    modifier = Modifier.padding(12.dp)
                 ) {
-
-                    Box(
+                    Text(
+                        text = "Current Queue (${activeIndex + 1}/${queue.size})",
+                        color = mutedCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier
-                            .fillMaxWidth(
-                                progress.coerceIn(
-                                    0f,
-                                    1f
-                                )
-                            )
-                            .fillMaxHeight()
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFFFFD600),
-                                        Color(0xFFFFB300)
-                                    )
-                                )
-                            )
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        textAlign = TextAlign.Center
                     )
-                }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(
-                            Color.White.copy(alpha = 0.03f)
-                        )
-                )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Show active item and a few surrounding items to keep it clean and fits the height
+                        val startIndex = (activeIndex - 2).coerceAtLeast(0)
+                        val itemsToShow = queue.drop(startIndex).take(5)
+
+                        itemsToShow.forEachIndexed { indexInSlice, queueItem ->
+                            val globalIndex = startIndex + indexInSlice
+                            val isActive = queueItem.id == item?.id
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isActive) Color.White.copy(alpha = 0.06f) else Color.Transparent
+                                    )
+                                    .clickable { onQueueItemClick(queueItem) }
+                                    .padding(vertical = 6.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Index or Active Play Icon
+                                Box(
+                                    modifier = Modifier.width(24.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (isActive) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Playing",
+                                            tint = cyanAccent,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = (globalIndex + 1).toString(),
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                // Title and Artist
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = queueItem.title,
+                                        color = if (isActive) cyanAccent else Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = queueItem.artist ?: "Unknown Artist",
+                                        color = if (isActive) mutedCyan else Color.White.copy(alpha = 0.6f),
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                // Duration
+                                Text(
+                                    text = formatDuration(queueItem.durationMs),
+                                    color = if (isActive) cyanAccent else Color.White.copy(alpha = 0.5f),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-@Composable
-private fun WidgetIconButton(
-    icon: ImageVector,
-    tint: Color = Color.White,
-    size: Dp = 40.dp,
-    onClick: () -> Unit
-) {
-
-    Surface(
-        modifier = Modifier.size(size),
-
-        shape = CircleShape,
-
-        color = Color.White.copy(alpha = 0.06f),
-
-        border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.05f)
-        ),
-
-        tonalElevation = 2.dp,
-
-        onClick = onClick
-    ) {
-
-        Box(
-            contentAlignment = Alignment.Center
-        ) {
-
-            Icon(
-                imageVector = icon,
-
-                contentDescription = null,
-
-                tint = tint,
-
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
+private fun formatDuration(durationMs: Long): String {
+    if (durationMs <= 0L) return "0:00"
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    val m = minutes.toString()
+    val s = seconds.toString().padStart(2, '0')
+    return "$m:$s"
 }

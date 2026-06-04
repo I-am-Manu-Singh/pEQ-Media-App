@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.ui.viewmodel.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.filled.Close
 /**
  * Global persistent widgets for the pEQ Workstation.
  */
@@ -98,15 +100,20 @@ fun NowPlayingTelemetryCard(viewModel: AppViewModel, primaryColor: Color = Mater
                 shape = RoundedCornerShape(12.dp),
                 color = primaryColor.copy(alpha = 0.1f)
             ) {
-                if (currentItem?.thumbnail != null) {
-                    pEQImage(data = currentItem?.thumbnail, modifier = Modifier.fillMaxSize())
+                if (currentItem?.thumbnail != null || currentItem?.path != null) {
+                    pEQImage(
+                        data = currentItem?.thumbnail,
+                        fallbackPath = currentItem?.path,
+                        modifier = Modifier.fillMaxSize(),
+                        mediaType = currentItem?.type
+                    )
                 } else {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-    imageVector = Icons.Filled.GraphicEq,
-    contentDescription = null,
-    tint = primaryColor
-)
+                            imageVector = Icons.Filled.GraphicEq,
+                            contentDescription = null,
+                            tint = primaryColor
+                        )
                     }
                 }
             }
@@ -143,6 +150,88 @@ fun LiveSpectrumVisualizer(viewModel: AppViewModel, height: androidx.compose.ui.
                         .fillMaxHeight(level.coerceIn(0.05f, 1f))
                         .background(primaryColor.copy(alpha = 0.6f), RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingLyricsOverlay(
+    viewModel: AppViewModel,
+    modifier: Modifier = Modifier
+) {
+    val currentPosition by viewModel.currentPosition
+    val lyrics = viewModel.syncedLyrics
+    
+    val currentLineIndex by remember(lyrics, currentPosition) {
+        derivedStateOf {
+            lyrics.indexOfLast { it.timestampMs <= currentPosition }.coerceAtLeast(0)
+        }
+    }
+    
+    val currentLyric = lyrics.getOrNull(currentLineIndex)
+    
+    Surface(
+        modifier = modifier
+            .padding(16.dp)
+            .widthIn(max = 340.dp)
+            .wrapContentHeight(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.Black.copy(alpha = 0.88f),
+        border = BorderStroke(1.2.dp, Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), Color.Transparent))),
+        shadowElevation = 12.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.QueueMusic,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            Spacer(Modifier.width(18.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = currentLyric?.text?.takeIf { it.isNotBlank() } ?: "NEURAL pEQ STATION",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                
+                val nextLyric = lyrics.getOrNull(currentLineIndex + 1)
+                if (nextLyric != null) {
+                    Text(
+                        text = nextLyric.text,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.45f),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+            
+            Spacer(Modifier.width(12.dp))
+
+            IconButton(
+                onClick = { viewModel.isLyricsVisible.value = false },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(16.dp))
             }
         }
     }

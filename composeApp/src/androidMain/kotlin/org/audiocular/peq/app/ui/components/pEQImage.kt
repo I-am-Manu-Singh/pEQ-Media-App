@@ -33,55 +33,92 @@ actual fun pEQImage(
     modifier: Modifier,
     contentScale: ContentScale,
     alpha: Float,
-    mediaType: MediaType?
+    mediaType: MediaType?,
+    fallbackPath: String?
 ) {
-    if (data == null || data.isEmpty()) {
+    if ((data == null || data.isEmpty()) && (fallbackPath == null || fallbackPath.isEmpty())) {
         DefaultPlaceholder(modifier, mediaType)
         return
     }
 
     val context = LocalContext.current
-    var bitmap by remember(data) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var bitmap by remember(data, fallbackPath) { mutableStateOf<android.graphics.Bitmap?>(null) }
     
-    LaunchedEffect(data) {
+    LaunchedEffect(data, fallbackPath) {
         withContext(Dispatchers.IO) {
             try {
-                if (data.startsWith("content://")) {
-                    val uri = Uri.parse(data)
-                    // Try direct stream first (for album art)
-                    context.contentResolver.openInputStream(uri)?.use { stream ->
-                        bitmap = BitmapFactory.decodeStream(stream)
-                    }
-                    
-                    // If failed and it's a video URI, try to load thumbnail
-                    if (bitmap == null && data.contains("video")) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            bitmap = context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
-                        }
-                    }
-                } else {
-                    val file = File(data)
-                    if (file.exists()) {
-                        val extension = file.extension.lowercase()
-                        if (extension == "mp4" || extension == "mkv" || extension == "mov" || extension == "webm") {
-                            val retriever = MediaMetadataRetriever()
-                            retriever.setDataSource(file.absolutePath)
-                            bitmap = retriever.getFrameAtTime(1000000) // 1 second in
-                            retriever.release()
-                        } else if (extension == "mp3" || extension == "flac" || extension == "wav" || extension == "m4a") {
-                            val retriever = MediaMetadataRetriever()
-                            try {
-                                retriever.setDataSource(file.absolutePath)
-                                val art = retriever.embeddedPicture
-                                if (art != null) {
-                                    bitmap = BitmapFactory.decodeByteArray(art, 0, art.size)
-                                }
-                            } finally {
-                                retriever.release()
+                // Helper to load image bitmap from path/uri
+                fun loadBitmap(source: String?): android.graphics.Bitmap? {
+                    if (source == null || source.isEmpty()) return null
+                    if (source.startsWith("content://")) {
+                        val uri = Uri.parse(source)
+                        try {
+                            context.contentResolver.openInputStream(uri)?.use { stream ->
+                                return BitmapFactory.decodeStream(stream)
                             }
-                        } else {
-                            bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                        } catch (_: Exception) {}
+                        
+                        if (source.contains("video")) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                try {
+                                    return context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                                } catch (_: Exception) {}
+                            }
                         }
+                    } else {
+                        val cleaned = source.replace("file://", "")
+                        val file = File(cleaned)
+                        if (file.exists()) {
+                            val extension = file.extension.lowercase()
+                            if (extension in setOf("mp4", "mkv", "mov", "webm", "3gp", "avi")) {
+                                val retriever = MediaMetadataRetriever()
+                                try {
+                                    retriever.setDataSource(file.absolutePath)
+                                    return retriever.getFrameAtTime(1000000) // 1 second in
+                                } catch (_: Exception) {
+                                } finally {
+                                    retriever.release()
+                                }
+                            } else if (extension in setOf("mp3", "flac", "wav", "m4a", "ogg", "wma", "aac")) {
+                                val retriever = MediaMetadataRetriever()
+                                try {
+                                    retriever.setDataSource(file.absolutePath)
+                                    val art = retriever.embeddedPicture
+                                    if (art != null) {
+                                        return BitmapFactory.decodeByteArray(art, 0, art.size)
+                                    }
+                                } catch (_: Exception) {
+                                } finally {
+                                    retriever.release()
+                                }
+                            } else {
+                                return BitmapFactory.decodeFile(file.absolutePath)
+                            }
+                        }
+                    }
+                    return null
+                }
+
+                // 1. Try loading from data
+                var bmp = loadBitmap(data)
+                if (bmp != null) {
+                    bitmap = bmp
+                    return@withContext
+                }
+
+                // 2. Try loading from fallbackPath
+                bmp = loadBitmap(fallbackPath)
+                if (bmp != null) {
+                    bitmap = bmp
+                    return@withContext
+                }
+
+                // 3. If data is content:// and failed, try to scan the fallback file directly as a last resort
+                if (data != null && data.startsWith("content://") && fallbackPath != null && !fallbackPath.startsWith("content://")) {
+                    bmp = loadBitmap(fallbackPath)
+                    if (bmp != null) {
+                        bitmap = bmp
+                        return@withContext
                     }
                 }
             } catch (e: Exception) {

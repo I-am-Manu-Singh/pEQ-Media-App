@@ -50,7 +50,7 @@ object pEQStrings {
     const val DAC_FILTER = "DAC FILTER"
     const val MIC_GAIN = "MIC GAIN"
     const val AMP_CURRENT = "AMP CURRENT"
-    const val NEURAL_MIXER = "NEURAL MIXER"
+    const val NEURAL_MIXER = "MIXER"
     const val MASTER_BUS = "MASTER BUS"
     const val NEURAL_DECOUPLING = "NEURAL DECOUPLING"
     const val READY_STATUS = "READY"

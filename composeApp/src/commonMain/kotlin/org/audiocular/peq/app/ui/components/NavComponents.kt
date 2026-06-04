@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.ui.viewmodel.*
-
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 /**
  * High-fidelity Navigation components for the pEQ Workstation.
  */
@@ -82,48 +84,137 @@ private fun NavRailItem(tab: Tab, isSelected: Boolean, onClick: () -> Unit) {
         }
     }
 }
-
 @Composable
-fun BottomNavigationBar(current: Tab, onSelect: (Tab) -> Unit) {
-    val tabs = listOf(Tab.Dashboard, Tab.Tuning, Tab.Player, Tab.Hardware, Tab.Mixer)
-    
+fun BottomNavigationBar(
+    current: Tab,
+    viewModel: AppViewModel,
+    onSelect: (Tab) -> Unit
+) {
+
+    val tabs = listOf(
+        Tab.Dashboard,
+        Tab.Tuning,
+        Tab.Mixer,
+        Tab.Hardware,
+        Tab.Learn
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp,
         shadowElevation = 16.dp
     ) {
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(64.dp)
+                .height(72.dp)
                 .padding(horizontal = 12.dp),
+
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
+
             tabs.forEach { tab ->
-                val isSelected = current == tab
-                val color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                
+
+                val isSelected =
+                    current == tab
+
+                val iconColor =
+                    if (isSelected)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                            .copy(alpha = 0.45f)
+
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelect(tab) }
-                        .padding(vertical = 8.dp),
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable {
+
+                            // CLOSE DRUM SCREEN
+                            viewModel.showDrumLibrary.value = false
+
+                            // CHANGE TAB
+                            onSelect(tab)
+                        }
+                        .padding(
+                            horizontal = 8.dp,
+                            vertical = 10.dp
+                        ),
+
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = getTabIcon(tab),
-                        contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.size(if (isSelected) 24.dp else 22.dp)
-                    )
+
+                    Box(
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        // ACTIVE BACKGROUND
                     if (isSelected) {
-                        Spacer(Modifier.height(4.dp))
-                        Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(color))
+
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .size(4.dp)
+            .clip(CircleShape)
+            .background(
+                MaterialTheme.colorScheme.primary
+            )
+    )
+}
+
+                        Icon(
+                            imageVector = tab.icon,
+
+                            contentDescription =
+                                tab.label,
+
+                            tint = iconColor,
+
+                            modifier =
+                                Modifier.size(
+                                    if (isSelected)
+                                        24.dp
+                                    else
+                                        21.dp
+                                )
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = tab.label,
+
+                        fontSize = 9.sp,
+
+                        maxLines = 1,
+
+                        fontWeight =
+                            if (isSelected)
+                                FontWeight.Bold
+                            else
+                                FontWeight.Medium,
+
+                        color = iconColor
+                    )
+
+                    if (isSelected) {
+
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    MaterialTheme.colorScheme.primary
+                                )
+                        )
                     }
                 }
             }
@@ -138,4 +229,5 @@ private fun getTabIcon(tab: Tab): ImageVector = when(tab) {
     Tab.Mixer -> Icons.Default.Tune
     Tab.Tuning -> Icons.Default.GraphicEq
     Tab.Learn -> Icons.Default.School
+    // Tab.DrumLibrary -> Icons.Default.MusicVideo
 }

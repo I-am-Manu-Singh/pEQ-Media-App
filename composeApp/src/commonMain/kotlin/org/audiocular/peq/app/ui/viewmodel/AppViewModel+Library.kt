@@ -105,7 +105,7 @@ fun AppViewModel.createPlaylist(name: String) {
 
 fun AppViewModel.addToPlaylist(playlist: String, item: pEQMediaItem) {
     val list = customPlaylists.getOrPut(playlist) { mutableStateListOf() }
-    if (!list.contains(item)) {
+    if (list.none { it.path == item.path }) {
         list.add(item)
         showToast("Added to $playlist")
     }
@@ -222,7 +222,7 @@ fun AppViewModel.toggleSelection(item: pEQMediaItem) {
 }
 
 fun AppViewModel.updateMostPlayed(item: pEQMediaItem) {
-    val count = playCounts.getOrDefault(item.path, 0) + 1
+    val count = (playCounts[item.path] ?: 0) + 1
     playCounts[item.path] = count
     lastPlayed[item.path] = Clock.System.now().toEpochMilliseconds()
     
@@ -234,4 +234,45 @@ fun AppViewModel.updateMostPlayed(item: pEQMediaItem) {
     
     mostPlayedItems.clear()
     mostPlayedItems.addAll(sorted)
+}
+fun AppViewModel.generateMoodPlaylist(mood: String, type: String) {
+    scope.launch {
+        val allItems = mediaLibrary.value
+        val filtered = allItems.filter { item ->
+            // Simple keyword-based mood mapping for now
+            val matchesType = when (type) {
+                "Music" -> item.type == MediaType.AUDIO
+                "Videos" -> item.type == MediaType.VIDEO
+                else -> true
+            }
+            
+            val matchesMood = when (mood.uppercase()) {
+                "ENERGETIC" -> item.title.contains("remix", true) || item.title.contains("dance", true) || item.title.contains("rock", true) || item.title.contains("fast", true) || item.bitrate > 256
+                "CHILL" -> item.title.contains("lofi", true) || item.title.contains("acoustic", true) || item.title.contains("ambient", true) || item.title.contains("relax", true) || item.bitrate < 192
+                "FOCUSED" -> item.title.contains("piano", true) || item.title.contains("instrumental", true) || item.title.contains("study", true) || item.title.contains("coding", true)
+                "MELANCHOLIC" -> item.title.contains("sad", true) || item.title.contains("blues", true) || item.title.contains("slow", true) || item.title.contains("emotional", true)
+                else -> true
+            }
+            
+            matchesType && matchesMood
+        }
+        
+        if (filtered.isNotEmpty()) {
+            val playlistName = "MOOD: ${mood.uppercase()}"
+            val sortedList = filtered.shuffled().take(20)
+            
+            // 1. Update Playback Queue
+            playbackQueue.clear()
+            playbackQueue.addAll(sortedList)
+            playMediaItem(playbackQueue.first())
+            
+            // 2. Create Persistent Playlist
+            customPlaylists[playlistName] = mutableStateListOf(*sortedList.toTypedArray())
+            
+            showToast("Neural sync established for $mood mood")
+            persistSession()
+        } else {
+            showToast("No matching assets found for $mood")
+        }
+    }
 }

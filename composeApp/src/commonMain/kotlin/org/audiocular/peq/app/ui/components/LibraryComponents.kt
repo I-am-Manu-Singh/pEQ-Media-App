@@ -116,20 +116,20 @@ fun MediaItemCard(
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize().combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(22.dp),
-        color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.50f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1.0f),
-        border = BorderStroke(1.dp, if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.06f)),
-        tonalElevation = if (isActive) 2.dp else 0.dp
+        color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1.0f),
+        border = BorderStroke(1.2.dp, if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.06f)),
+        tonalElevation = if (isActive) 8.dp else 0.dp
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(58.dp), contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.size(56.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)) {
-                    if (item.thumbnail != null) {
-                        pEQImage(data = item.thumbnail, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, mediaType = item.type)
-                    } else {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(imageVector = if (item.type == MediaType.VIDEO) Icons.Default.VideoLibrary else Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f), modifier = Modifier.size(22.dp))
-                        }
-                    }
+                    pEQImage(
+                        data = item.thumbnail,
+                        fallbackPath = item.path,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        mediaType = item.type
+                    )
                 }
                 if (isActive) {
                     Box(modifier = Modifier.matchParentSize().background(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), shape = RoundedCornerShape(16.dp)))
@@ -186,8 +186,8 @@ fun MediaItemCard(
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f), modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(expanded = showMenuState, onDismissRequest = { showMenuState = false }) {
-                            DropdownMenuItem(text = { Text("Add to Queue") }, leadingIcon = { Icon(imageVector = Icons.Default.QueueMusic, contentDescription = null) }, onClick = { viewModel.addToQueue(item); showMenuState = false })
-                            DropdownMenuItem(text = { Text("Add to Playlist") }, leadingIcon = { Icon(imageVector = Icons.Default.PlaylistAdd, contentDescription = null) }, onClick = { viewModel.selectedItemForPlaylist.value = item; viewModel.isPlaylistPickerShown.value = true; showMenuState = false })
+                            DropdownMenuItem(text = { Text("Add to Queue") }, leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) }, onClick = { viewModel.addToQueue(item); showMenuState = false })
+                            DropdownMenuItem(text = { Text("Add to Playlist") }, leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null) }, onClick = { viewModel.isPlaylistBulkAction.value = false; viewModel.selectedItemForPlaylist.value = item; viewModel.isPlaylistPickerShown.value = true; showMenuState = false })
                             DropdownMenuItem(text = { Text("Neural Split") }, leadingIcon = { Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null) }, onClick = { viewModel.currentMediaItem.value = item; viewModel.startStemSplit(); showMenuState = false })
                         }
                     }
@@ -238,8 +238,8 @@ fun MediaFolderCard(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onAddQueue) { Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
-                IconButton(onClick = onAddPlaylist) { Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
+                IconButton(onClick = onAddQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
+                IconButton(onClick = onAddPlaylist) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                 Spacer(Modifier.width(4.dp))
                 Text(text = "${totalSize / 1024 / 1024}MB", fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
             }
@@ -255,8 +255,8 @@ fun PlaylistPicker(
 ) {
     val playlists = viewModel.playlists
     val selectedSingleItem = viewModel.selectedItemForPlaylist.value ?: viewModel.currentMediaItem.value
-    val selectedItems = remember(selectedSingleItem, viewModel.playbackQueue, viewModel.isPlaylistPickerShown.value) {
-        if (viewModel.selectedItemForPlaylist.value == null && viewModel.playbackQueue.isNotEmpty()) {
+    val selectedItems = remember(selectedSingleItem, viewModel.playbackQueue.size, viewModel.isPlaylistBulkAction.value, viewModel.isPlaylistPickerShown.value) {
+        if (viewModel.isPlaylistBulkAction.value) {
             viewModel.playbackQueue.toList()
         } else {
             listOfNotNull(selectedSingleItem)
@@ -276,7 +276,7 @@ fun PlaylistPicker(
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
             Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Surface(modifier = Modifier.size(58.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                    Box(contentAlignment = Alignment.Center) { Icon(imageVector = Icons.Default.PlaylistAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) }
+                    Box(contentAlignment = Alignment.Center) { Icon(imageVector = Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) }
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -524,6 +524,7 @@ fun <T> MediaSelectionSheet(
     title: String,
     items: List<T>,
     selectedItem: T? = null,
+    isLoading: Boolean = false,
     emptyIcon: ImageVector,
     emptyTitle: String,
     emptyMessage: String,
@@ -546,18 +547,31 @@ fun <T> MediaSelectionSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = title, fontWeight = FontWeight.Black, fontSize = 22.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text(text = when { items.isEmpty() -> "No items available"; items.size == 1 -> "1 item detected"; else -> "${items.size} items detected" }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = when { 
+                        isLoading -> ""
+                        items.isEmpty() -> "No items available" 
+                        items.size == 1 -> "1 item detected" 
+                        else -> "${items.size} items detected" 
+                    }, fontSize = 11.sp, color = if (isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (actionLabel != null && onAction != null) { TextButton(onClick = onAction) { Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary) } }
-                    if (onOnlineSearch != null) { FilledTonalButton(onClick = onOnlineSearch) { Icon(imageVector = Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(text = "Online", fontSize = 11.sp) }; Spacer(Modifier.width(8.dp)) }
+                    if (onOnlineSearch != null && !isLoading) { FilledTonalButton(onClick = onOnlineSearch) { Icon(imageVector = Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(text = "Online", fontSize = 11.sp) }; Spacer(Modifier.width(8.dp)) }
                     if (onPickFile != null) { FilledTonalIconButton(onClick = onPickFile) { Icon(imageVector = Icons.Default.FolderOpen, contentDescription = "Pick Local File") }; Spacer(Modifier.width(8.dp)) }
                     FilledTonalIconButton(onClick = onClose) { Icon(imageVector = Icons.Default.Close, contentDescription = null) }
                 }
             }
             Spacer(Modifier.height(18.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
-            if (items.isEmpty()) {
+            
+            if (isLoading) {
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(modifier = Modifier.size(38.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.height(24.dp))
+                    Text(text = "NEURAL SEARCH ACTIVE", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text(text = "Establishing connection to metadata archive...", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else if (items.isEmpty()) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Surface(modifier = Modifier.size(74.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHighest) { Box(contentAlignment = Alignment.Center) { Icon(imageVector = emptyIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), modifier = Modifier.size(34.dp)) } }
                     Spacer(Modifier.height(18.dp))
@@ -567,7 +581,7 @@ fun <T> MediaSelectionSheet(
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 28.dp)) {
-                    itemsIndexed(items = items, key = { index, item -> "${itemKey(item)}_$index" }) { index, item ->
+                    itemsIndexed(items = items, key = { i, item -> "${itemKey(item)}_$i" }) { _, item ->
                         val isSelected = selectedItem == item
                         Surface(onClick = { onItemClick(item) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh, border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.06f))) {
                             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {

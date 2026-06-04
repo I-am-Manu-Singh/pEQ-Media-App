@@ -11,5 +11,6 @@ enum class Tab(val label: String, val icon: ImageVector) {
     Hardware(pEQStrings.HARDWARE_TAB, Icons.Default.SettingsInputComponent),
     Learn("LEARN", Icons.Default.School),
     Mixer(org.audiocular.peq.app.ui.theme.pEQStrings.NEURAL_MIXER, Icons.Default.Tune),
-    Player("NOW PLAYING", Icons.Default.GraphicEq)
+    Player("NOW PLAYING", Icons.Default.GraphicEq),
+    // DrumLibrary("DRUM LIBRARY", Icons.Default.School)
 }

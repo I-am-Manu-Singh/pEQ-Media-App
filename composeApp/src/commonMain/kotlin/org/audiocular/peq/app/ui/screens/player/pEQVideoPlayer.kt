@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.*
@@ -176,7 +177,7 @@ LaunchedEffect(item.path) {
 stableVideoSurface(contentScale)
 
 
-      AnimatedVisibility(
+     AnimatedVisibility(
     visible = controlsVisible || isLocked,
 
     enter =
@@ -284,11 +285,13 @@ stableVideoSurface(contentScale)
 
                 onDragCancel = {
 
-                    viewModel.isGestureInteracting.value = false
+    viewModel.isGestureInteracting.value = false
 
-                    dragMode = null
-                    gestureUIState = null
-                }
+    dragMode = null
+    gestureUIState = null
+
+    controlsVisible = true
+}
 
             ) { change, dragAmount ->
 
@@ -436,120 +439,47 @@ stableVideoSurface(contentScale)
 )
 
         // Visual feedback for Gestures
-         AnimatedVisibility(
+        AnimatedVisibility(
             visible = gestureUIState != null,
-
-            enter =
-                fadeIn() +
-                        scaleIn(
-                            initialScale = 0.94f
-                        ),
-
-            exit =
-                fadeOut() +
-                        scaleOut(
-                            targetScale = 0.94f
-                        )
+            enter = fadeIn() + scaleIn(initialScale = 0.94f),
+            exit = fadeOut() + scaleOut(targetScale = 0.94f)
         ) {
-
-            Box(
-                modifier = Modifier.fillMaxSize(),
-
-                contentAlignment =
-                    Alignment.Center
-            ) {
-
-                gestureUIState?.let {
-
-                        (label, value) ->
-
-                    Surface(
-                        shape =
-                            RoundedCornerShape(26.dp),
-
-                        color =
-    Color.Black.copy(alpha = 0.78f),
-
-                        tonalElevation = 12.dp,
-
-                        shadowElevation = 18.dp
-                    ) {
-
-                        Column(
-                            modifier = Modifier.padding(
-                                horizontal = 22.dp,
-                                vertical = 18.dp
-                            ),
-
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally
-                        ) {
-
-                            Text(
-                                text = label,
-
-                                color =
-                                    Color.White,
-
-                                fontWeight =
-                                    FontWeight.Bold,
-
-                                fontSize = 13.sp
-                            )
-
-                            Spacer(
-                                Modifier.height(12.dp)
-                            )
-
-                            LinearProgressIndicator(
-                                progress = {
-                                    value.coerceIn(
-                                        0f,
-                                        1f
+            Box(modifier = Modifier.fillMaxSize()) {
+                gestureUIState?.let { (label, value) ->
+                    if (label == "VOLUME") {
+                        Box(modifier = Modifier.fillMaxSize().padding(end = 40.dp), contentAlignment = Alignment.CenterEnd) {
+                            VerticalGestureBar(label = "VOLUME", value = value, icon = if (value > 0.5f) Icons.Default.VolumeUp else if (value > 0f) Icons.Default.VolumeDown else Icons.Default.VolumeMute)
+                        }
+                    } else if (label == "BRIGHTNESS") {
+                        Box(modifier = Modifier.fillMaxSize().padding(start = 40.dp), contentAlignment = Alignment.CenterStart) {
+                            VerticalGestureBar(label = "BRIGHTNESS", value = value, icon = Icons.Default.BrightnessMedium)
+                        }
+                    } else {
+                        // SEEK (Center)
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Surface(
+                                shape = RoundedCornerShape(26.dp),
+                                color = Color.Black.copy(alpha = 0.78f),
+                                tonalElevation = 12.dp,
+                                shadowElevation = 18.dp
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Spacer(Modifier.height(12.dp))
+                                    LinearProgressIndicator(
+                                        progress = { value.coerceIn(0f, 1f) },
+                                        modifier = Modifier.width(170.dp).height(7.dp).clip(CircleShape),
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                },
-
-                                modifier = Modifier
-                                    .width(170.dp)
-                                    .height(7.dp)
-                                    .clip(CircleShape),
-
-                                trackColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceVariant
-                            )
-
-                            Spacer(
-                                Modifier.height(10.dp)
-                            )
-
-                            Text(
-                                text =
-
-                                    if (
-                                        label.startsWith(
-                                            "SEEK"
-                                        )
-                                    ) {
-
-                                       "${formatTime(pendingSeekPosition)} / ${formatTime(currentDuration)}"
-
-                                    } else {
-
-                                        "${(value * 100).toInt()}%"
-                                    },
-
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface,
-
-                                fontSize = 11.sp,
-
-                                fontWeight =
-                                    FontWeight.SemiBold
-                            )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(
+                                        text = "${formatTime(pendingSeekPosition)} / ${formatTime(currentDuration)}",
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -558,7 +488,14 @@ stableVideoSurface(contentScale)
 
 
         // Controls Layer
-        AnimatedVisibility(visible = controlsVisible || isLocked, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(
+    visible =
+        (controlsVisible || isLocked) &&
+        !viewModel.isGestureInteracting.value,
+
+    enter = fadeIn(),
+    exit = fadeOut()
+) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Lock Button (Persistent)
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 18.dp, end = 18.dp), contentAlignment = Alignment.TopEnd) {
@@ -645,67 +582,59 @@ fun ImmersiveTopBar(
     onInfo: () -> Unit
 ) {
     val viewModel = LocalAppViewModel.current
-    Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        FilledTonalIconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-        Spacer(Modifier.width(12.dp))
-        Text(text = title, modifier = Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.width(12.dp))
-        FilledTonalIconButton(onClick = {
-            val next = when (contentScale) {
-                ContentScale.Fit -> ContentScale.FillBounds
-                ContentScale.FillBounds -> ContentScale.Crop
-                else -> ContentScale.Fit
-            }
-            onContentScaleChange(next)
-        }) { 
-            Icon(imageVector = when (contentScale) { 
-                ContentScale.Fit -> Icons.Default.AspectRatio
-                ContentScale.FillBounds -> Icons.Default.Fullscreen
-                else -> Icons.Default.FitScreen 
-            }, contentDescription = "Resize") 
-        }
-        Spacer(Modifier.width(8.dp))
+    Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+        // Floating Back Button (Doesn't take row space)
         FilledTonalIconButton(
-            onClick = { viewModel.toggleSubtitles(!viewModel.isSubtitlesEnabled.value) },
-            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = if (viewModel.isSubtitlesEnabled.value) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-        ) { Icon(Icons.Default.ClosedCaption, "Subs") }
-        Spacer(Modifier.width(8.dp))
-        var isLandscape by remember {
-    mutableStateOf(true)
-}
-
-FilledTonalIconButton(
-    onClick = {
-
-        isLandscape = !isLandscape
-
-        setScreenOrientation(
-            if (isLandscape) {
-                pEQOrientation.LANDSCAPE
-            } else {
-                pEQOrientation.PORTRAIT
-            }
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.CenterStart).size(48.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f))
+        ) { 
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", modifier = Modifier.size(24.dp), tint = Color.White) 
+        }
+        
+        Text(
+            text = title, 
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 64.dp), 
+            color = Color.White, 
+            fontWeight = FontWeight.Black, 
+            maxLines = 1, 
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 14.sp
         )
-
-        onRotate()
-    }
-) {
-
-    Icon(
-        imageVector = Icons.AutoMirrored.Filled.RotateRight,
-        contentDescription = "Rotate"
-    )
-}
-        Spacer(Modifier.width(8.dp))
-        FilledTonalIconButton(onClick = onInfo) { Icon(Icons.Default.Info, null) }
-        Spacer(Modifier.width(8.dp))
-        FilledTonalIconButton(onClick = {
-            viewModel.onEnterPiP?.invoke()
-        }) { Icon(Icons.Default.PictureInPicture, "PiP") }
-        Spacer(Modifier.width(8.dp))
-        FilledTonalIconButton(onClick = onLock) { Icon(if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen, null) }
+        Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalIconButton(onClick = {
+                val next = when (contentScale) {
+                    ContentScale.Fit -> ContentScale.FillBounds
+                    ContentScale.FillBounds -> ContentScale.Crop
+                    else -> ContentScale.Fit
+                }
+                onContentScaleChange(next)
+            }) { 
+                Icon(imageVector = when (contentScale) { 
+                    ContentScale.Fit -> Icons.Default.AspectRatio
+                    ContentScale.FillBounds -> Icons.Default.Fullscreen
+                    else -> Icons.Default.FitScreen 
+                }, contentDescription = "Scale", tint = Color.White) 
+            }
+            
+            Spacer(Modifier.width(8.dp))
+            
+            FilledTonalIconButton(onClick = onRotate) { 
+                Icon(Icons.AutoMirrored.Filled.RotateRight, "Rotate", tint = Color.White) 
+            }
+            
+            Spacer(Modifier.width(8.dp))
+            
+            FilledTonalIconButton(onClick = onLock) { 
+                Icon(if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen, null, tint = Color.White) 
+            }
+            
+            Spacer(Modifier.width(8.dp))
+            
+            FilledTonalIconButton(onClick = onInfo) { 
+                Icon(Icons.Default.Info, null, tint = Color.White) 
+            }
+        }
     }
 }
 
@@ -745,6 +674,48 @@ private fun ImmersiveControlsRow(viewModel: AppViewModel, item: pEQMediaItem) {
             icon = if (viewModel.repeatMode.value == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, 
             active = viewModel.repeatMode.value != RepeatMode.OFF
         ) { viewModel.cycleRepeatMode() }
+    }
+}
+
+@Composable
+private fun VerticalGestureBar(label: String, value: Float, icon: ImageVector) {
+    Surface(
+        modifier = Modifier.width(54.dp).height(220.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.Black.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+            
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .width(6.dp)
+                    .padding(vertical = 12.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(value.coerceIn(0f, 1f))
+                        .background(Color.White)
+                )
+            }
+            
+            Text(
+                text = "${(value * 100).toInt()}%",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black
+            )
+        }
     }
 }
 

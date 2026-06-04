@@ -11,10 +11,17 @@ class AndroidPersistenceManager(val context: Context) : PersistenceManager {
     }
     private val json = Json { ignoreUnknownKeys = true }
 
-    override var openSubtitlesApiKey: String
-        get() = prefs.getString("os_api_key", "") ?: ""
-        set(value) = prefs.edit().putString("os_api_key", value).apply()
+  override var openSubtitlesApiKey: String
 
+    get() = prefs.getString("os_api_key", "") ?: ""
+
+    set(value) = prefs.edit().putString("os_api_key", value).apply()
+
+override fun saveOpenSubtitlesApiKey(key: String) {
+
+    openSubtitlesApiKey = key
+
+}
     override fun saveString(key: String, value: String) {
         prefs.edit().putString(key, value).apply()
     }
@@ -39,6 +46,11 @@ class AndroidPersistenceManager(val context: Context) : PersistenceManager {
         try {
             val serialized = json.encodeToString(state)
             saveString("neural_session", serialized)
+            
+            // Sync to widget prefs for large widget queue view
+            val widgetPrefs = context.getSharedPreferences("peq_widget_prefs", Context.MODE_PRIVATE)
+            val queueTitles = state.queue.map { it.title }
+            widgetPrefs.edit().putString("queue_json", json.encodeToString(queueTitles)).apply()
         } catch (e: Exception) {
             println("pEQControl: [PERSISTENCE] Error saving session: ${e.message}")
         }
@@ -218,14 +230,3 @@ fun initPersistenceManager(context: Context) {
     _instance = AndroidPersistenceManager(context)
 }
 
-override var openSubtitlesApiKey: String
-
-    get() = prefs.getString("os_api_key", "") ?: ""
-
-    set(value) = prefs.edit().putString("os_api_key", value).apply()
-
-override fun saveOpenSubtitlesApiKey(key: String) {
-
-    openSubtitlesApiKey = key
-
-}

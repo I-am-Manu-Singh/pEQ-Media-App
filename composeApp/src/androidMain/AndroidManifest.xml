@@ -66,15 +66,7 @@
 
     <!-- Optional -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <!-- REMOVE unless absolutely needed -->
-    <!-- <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/> -->
-
-    <!-- REMOVE unless actually scheduling alarms -->
-    <!-- <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/> -->
-
-    <!-- REMOVE unless biometric auth exists -->
-    <!-- <uses-permission android:name="android.permission.USE_BIOMETRIC"/> -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
     <application
         android:allowBackup="true"
@@ -137,6 +129,12 @@
                 <data android:scheme="pEQ" tools:ignore="AppLinkUrlError" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
         </activity>
 
         <!-- ================================================= -->
@@ -171,6 +169,7 @@
                 <action android:name="org.audiocular.peq.app.ACTION_PREV" />
                 <action android:name="org.audiocular.peq.app.ACTION_REPEAT" />
                 <action android:name="org.audiocular.peq.app.ACTION_FAVORITE" />
+                <action android:name="org.audiocular.peq.app.ACTION_SHUFFLE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -224,6 +223,11 @@
             </intent-filter>
 
         </service>
+        
+        <service
+            android:name=".services.pEQOverlayService"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 

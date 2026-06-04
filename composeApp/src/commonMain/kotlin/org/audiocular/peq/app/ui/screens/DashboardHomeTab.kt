@@ -3,7 +3,11 @@ package org.audiocular.peq.app.ui.screens
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -116,13 +120,17 @@ private fun MostPlayedSection(viewModel: AppViewModel) {
         }
         items.filter { it.playCount > 0 && (now - it.lastPlayed) < threshold }
              .sortedByDescending { it.playCount }
-             .take(5)
+             .take(10)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             listOf("WEEK", "MONTH", "YEAR", "ALL").forEach { filter ->
-                TextButton(onClick = { timeFilter = filter }) {
+                TextButton(
+                    onClick = { timeFilter = filter },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
                     Text(
                         filter, 
                         fontSize = 10.sp, 
@@ -135,7 +143,7 @@ private fun MostPlayedSection(viewModel: AppViewModel) {
         
         if (filteredItems.isEmpty()) {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(100.dp),
+                modifier = Modifier.fillMaxWidth().height(140.dp),
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
             ) {
@@ -144,13 +152,75 @@ private fun MostPlayedSection(viewModel: AppViewModel) {
                 }
             }
         } else {
-            filteredItems.forEach { item ->
-                MediaItemCard(
-                    item = item,
-                    showPlayCount = true,
-                    onClick = { viewModel.playMediaItem(item) }
-                )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) {
+                items(filteredItems) { item ->
+                    SquareMediaCard(
+                        item = item,
+                        onClick = { viewModel.playMediaItem(item) }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+fun SquareMediaCard(item: org.audiocular.peq.app.data.pEQMediaItem, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Surface(
+            modifier = Modifier
+                .aspectRatio(1f)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 4.dp
+        ) {
+            Box {
+                pEQImage(
+                    data = item.thumbnail,
+                    fallbackPath = item.path,
+                    modifier = Modifier.fillMaxSize()
+                )
+                
+                // Play count badge
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                ) {
+                    Text(
+                        text = item.playCount.toString(),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(10.dp))
+        
+        Text(
+            text = item.title,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = item.artist ?: "Unknown Artist",
+            fontSize = 9.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

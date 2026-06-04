@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -155,10 +156,21 @@ fun ArchiveCommandCard(viewModel: AppViewModel) {
         }
     }
 }
+// REPLACE YOUR ENTIRE StreamingIntakeCard WITH THIS
 
 @Composable
 fun StreamingIntakeCard(viewModel: AppViewModel) {
-    var showStreamDialog by remember { mutableStateOf(false) }
+    var streamUrl by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(MediaType.AUDIO) }
+    var isLoading by remember { mutableStateOf(false) }
+    var streamStatus by remember { mutableStateOf("IDLE") }
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    // Download options
+    var downloadAudio by remember { mutableStateOf(true) }
+    var downloadVideo by remember { mutableStateOf(false) }
+    var highQuality by remember { mutableStateOf(true) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
@@ -167,60 +179,142 @@ fun StreamingIntakeCard(viewModel: AppViewModel) {
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CloudDownload, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("STREAM INTAKE", fontSize = 13.sp, fontWeight = FontWeight.Black)
-                    Text("Initialize HLS/MP4/MP3 network feeds", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Box(modifier = Modifier.padding(10.dp)) {
+                        Icon(Icons.Default.CloudDownload, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { showStreamDialog = true }, shape = RoundedCornerShape(12.dp)) {
-                        Text("INTAKE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text("STREAM INTAKE", fontSize = 12.sp, fontWeight = FontWeight.Black)
+                    Text("LINK & CAPTURE NETWORK MEDIA", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.6f))
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { showAdvanced = !showAdvanced }) {
+                    Icon(if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.Settings, null, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            OutlinedTextField(
+                value = streamUrl,
+                onValueChange = { streamUrl = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                singleLine = true,
+                label = { Text("Stream URL") },
+                leadingIcon = { Icon(Icons.Default.Link, null, modifier = Modifier.size(18.dp)) }
+            )
+
+            AnimatedVisibility(visible = showAdvanced) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = selectedType == MediaType.AUDIO,
+                            onClick = { selectedType = MediaType.AUDIO },
+                            label = { Text("AUDIO", fontSize = 9.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedType == MediaType.VIDEO,
+                            onClick = { selectedType = MediaType.VIDEO },
+                            label = { Text("VIDEO", fontSize = 9.sp) }
+                        )
                     }
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = downloadAudio, onCheckedChange = { downloadAudio = it }, modifier = Modifier.scale(0.8f))
+                            Text("SAVE AUDIO", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = downloadVideo, onCheckedChange = { downloadVideo = it }, modifier = Modifier.scale(0.8f))
+                            Text("SAVE VIDEO", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = highQuality, onCheckedChange = { highQuality = it }, modifier = Modifier.scale(0.8f))
+                            Text("HQ", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            Button(
+                onClick = {
+                    if (streamUrl.isBlank()) { streamStatus = "INVALID URL"; return@Button }
+                    isLoading = true
+                    viewModel.addStreamUrl(streamUrl, selectedType)
+                    if (downloadAudio || downloadVideo) {
+                        viewModel.startMediaDownload(streamUrl, downloadAudio, downloadVideo, highQuality, true, "1080p", "320kbps")
+                    }
+                    streamStatus = "LINKED"
+                    isLoading = false
+                },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                shape = RoundedCornerShape(14.dp),
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Bolt, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { viewModel.openWebSearch("youtube", "YOUTUBE SEARCH") }, shape = RoundedCornerShape(12.dp)) {
-                        Text("YT SEARCH", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Text("INITIATE INTAKE", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(if (streamStatus == "LINKED") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(streamStatus, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                item {
+                    SuggestionChip(
+                        onClick = { streamUrl = "https://youtube.com" },
+                        label = { Text("YOUTUBE", fontSize = 9.sp) }
+                    )
+                }
+                item {
+                    SuggestionChip(
+                        onClick = { streamUrl = "https://soundcloud.com" },
+                        label = { Text("SOUNDCLOUD", fontSize = 9.sp) }
+                    )
+                }
+                item {
+                    SuggestionChip(
+                        onClick = { streamUrl = "https://archive.org" },
+                        label = { Text("ARCHIVE", fontSize = 9.sp) }
+                    )
+                }
+                item {
+                    SuggestionChip(
+                        onClick = { streamUrl = "https://streams.ilovemusic.de/iloveradio1.mp3" },
+                        label = { Text("LIVE RADIO", fontSize = 9.sp) }
+                    )
                 }
             }
         }
     }
-    if (showStreamDialog) {
-        StreamIntakeDialog(onDismiss = { showStreamDialog = false }, onConfirm = { url, type ->
-            viewModel.addStreamUrl(url, type)
-            showStreamDialog = false
-        })
-    }
-}
-
-@Composable
-fun StreamIntakeDialog(onDismiss: () -> Unit, onConfirm: (String, MediaType) -> Unit) {
-    var url by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Stream Intake Manifest", fontWeight = FontWeight.Black) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Network URL (HLS / MP4 / MP3 / FLAC)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                )
-                Spacer(Modifier.height(16.dp))
-                Text("Select Intake Mode:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        },
-        confirmButton = {
-            Row {
-                Button(onClick = { onConfirm(url, MediaType.AUDIO) }) { Text("AUDIO") }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = { onConfirm(url, MediaType.VIDEO) }) { Text("VIDEO") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
-    )
 }
 
 @Composable

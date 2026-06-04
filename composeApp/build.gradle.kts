@@ -148,13 +148,13 @@ kotlin {
                     "androidx.work:work-runtime-ktx:2.9.0"
                 )
 
-                implementation(
-                    "com.github.yausername.youtubedl-android:library:0.14.0"
-                )
+             implementation(
+    "com.github.yausername.youtubedl-android:library:0.14.0"
+)
 
-                implementation(
-                    "com.github.yausername.youtubedl-android:ffmpeg:0.14.0"
-                )
+implementation(
+    "com.github.yausername.youtubedl-android:ffmpeg:0.14.0"
+)
 
                 implementation(
                     "com.google.android.gms:play-services-cast-framework:21.4.0"

@@ -25,5 +25,6 @@ interface pEQFileScanner {
     fun shareAudioFile(file: AudioFile)
     fun exportPlaylist(name: String, tracks: List<AudioFile>)
     fun readFileContent(path: String): String?
+    fun readResourceContent(name: String): String?
     fun listFiles(path: String): List<String>
 }

@@ -69,9 +69,8 @@ import androidx.compose.runtime.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun HeaderSection( 
-    viewModel: AppViewModel,
-    onSettingsClick: () -> Unit
+fun HeaderSection(
+    viewModel: AppViewModel
 ) {
 
     var showAudioPanel by remember {
@@ -234,6 +233,8 @@ fun HeaderSection(
                                 pEQImage(
                                     data =
                                         nowPlaying.thumbnail,
+                                    fallbackPath =
+                                        nowPlaying.path,
 
                                     modifier = Modifier
                                         .fillMaxSize()

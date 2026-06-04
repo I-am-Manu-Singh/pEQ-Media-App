@@ -299,25 +299,29 @@ private fun ArchiveCommandSection(viewModel: AppViewModel, primaryColor: Color) 
 
 @Composable
 private fun HardwareRegistrySection(viewModel: AppViewModel, primaryColor: Color) {
+    val registry = viewModel.audioEngine.getRegistry()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (viewModel.connectedDevices.isEmpty()) {
-            HardwareControlItem(label = "OUTPUT DEVICE", value = "INTERNAL SPEAKER", desc = "Primary system output bridge", enabled = true)
-        } else {
-            viewModel.connectedDevices.forEach { device ->
-                HardwareControlItem(
-                    label = "OUTPUT DEVICE", 
-                    value = device.name, 
-                    desc = if (device.isHighRes) "High-fidelity ${device.sampleRate}kHz bridge" else "Standard system output bridge", 
-                    enabled = true
-                )
-            }
+        registry.forEach { (key, value) ->
+            HardwareControlItem(
+                label = key,
+                value = value,
+                desc = "Active $key configuration from system bus.",
+                enabled = true
+            )
         }
     }
 }
 
 @Composable
 private fun NeuralEngineRegistry(viewModel: AppViewModel) {
-    HardwareControlItem(label = "NEURAL SATURATION", value = if (viewModel.isNeuralSaturationEnabled.value) "ACTIVE" else "OFF", desc = "TFLite harmonic generator engine", enabled = viewModel.isNeuralSaturationEnabled.value, onToggle = { viewModel.toggleNeuralSaturation(it) })
+    val status = if (viewModel.isNeuralSaturationEnabled.value) "ACTIVE" else "BYPASS"
+    HardwareControlItem(
+        label = "NEURAL SATURATION", 
+        value = status, 
+        desc = "Harmonic generator via ${viewModel.audioEngine.getDecoderInfo()} pipeline", 
+        enabled = viewModel.isNeuralSaturationEnabled.value, 
+        onToggle = { viewModel.toggleNeuralSaturation(it) }
+    )
 }
 
 @Composable

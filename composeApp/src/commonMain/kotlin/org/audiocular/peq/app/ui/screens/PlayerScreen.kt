@@ -49,7 +49,7 @@ fun PlayerScreen(
 ) {
     val currentItem = item
     
-    if (viewModel.isPiPMode.value && currentItem != null) {
+    if (viewModel.isPiPMode.value && currentItem != null && currentItem.type == MediaType.VIDEO) {
         PiPPlayerView(viewModel, currentItem)
         return
     }
@@ -182,8 +182,8 @@ fun PlayerScreen(
             UnifiedMetadataEditor(viewModel = viewModel, type = MetadataEditorType.SUBTITLES, settings = viewModel.subtitleSettings.value, onSettingsChange = { viewModel.subtitleSettings.value = it })
         }
 
-        if (viewModel.isLyricsWebViewVisible.value) {
-            LyricsWebView(url = viewModel.lyricsSearchUrl.value, onDismiss = { viewModel.isLyricsWebViewVisible.value = false })
+        if (viewModel.showBrowser.value) {
+            LyricsWebView(url = viewModel.browserUrl.value, onDismiss = { viewModel.showBrowser.value = false })
         }
 
         AnimatedVisibility(visible = viewModel.showSubtitleConsole.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(70f)) {
@@ -191,6 +191,7 @@ fun PlayerScreen(
                 title = "SUBTITLES",
                 items = viewModel.availableSubtitleTracks,
                 selectedItem = viewModel.selectedSubtitleTrack.value,
+                isLoading = viewModel.isFetchingSubtitles.value,
                 emptyIcon = Icons.Default.Subtitles,
                 emptyTitle = "No subtitles detected",
                 emptyMessage = "Embedded subtitle tracks will appear here.",
@@ -247,9 +248,7 @@ fun EmptyPlayerState(onBack: () -> Unit) {
                     Icon(Icons.Default.GraphicEq, null, modifier = Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
-            Spacer(Modifier.height(32.dp))
-            Text(text = "NEURAL STATION IDLE", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
+          Spacer(Modifier.height(8.dp))
             Text(text = "The audio buffer is currently empty.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
             Spacer(Modifier.height(48.dp))
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(0.8f).height(56.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
@@ -406,7 +405,7 @@ fun TrackInfoBottomSheet(
                             Alignment.Center
                     ) {
 
-                        pEQImage(data = item.thumbnail, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                        pEQImage(data = item.thumbnail, fallbackPath = item.path, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                     }
 
                     Spacer(

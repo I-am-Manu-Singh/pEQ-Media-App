@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.*
 import org.audiocular.peq.app.ui.components.*
+import org.audiocular.peq.app.ui.screens.*
 import org.audiocular.peq.app.ui.viewmodel.*
 import org.audiocular.peq.app.ui.viewmodel.toggleLyrics
 import org.audiocular.peq.app.ui.viewmodel.toggleLockScreenMode
@@ -72,287 +73,114 @@ fun NeuralAudioWorkstation(
         }
     }
 
-    val isLyricsVisible by remember { derivedStateOf { viewModel.isLyricsVisible.value } }
-    val isPlaying by remember { derivedStateOf { viewModel.isPlaying.value } }
-    val visualizerMode by remember { derivedStateOf { viewModel.visualizerMode.value } }
+    val isFocusMode by viewModel.isFocusMode
+    val isLockScreenMode by viewModel.isLockScreenMode
+    val isPlaying by viewModel.isPlaying
+    val isLyricsVisible by viewModel.isLyricsVisible
+    val visualizerMode by viewModel.visualizerMode
     val rtaData by viewModel.rtaData
-    val artworkColors = rememberArtworkGradient(currentItem)
-    val dominantColor = artworkColors.firstOrNull() ?: MaterialTheme.colorScheme.primary
+    val dominantColor by viewModel.dominantColor
+    val ambientIntensity by viewModel.ambientIntensity
 
-    val ambientIntensity by remember(rtaData) {
-        derivedStateOf {
-            rtaData.take(10).average().toFloat().coerceIn(0f, 1f)
-        }
-    }
+    Box(modifier = Modifier.fillMaxSize().background(if (isFocusMode) Color.Black else MaterialTheme.colorScheme.background)) {
+        if (!isFocusMode) {
+            DynamicAmbientBackdrop(dominantColor = dominantColor, intensity = ambientIntensity)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        DynamicAmbientBackdrop(dominantColor = dominantColor, intensity = ambientIntensity)
-
-        Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.radialGradient(
-                    colors = listOf(dominantColor.copy(alpha = 0.11f), Color.Transparent),
-                    radius = 1450f
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.radialGradient(
+                        colors = listOf(dominantColor.copy(alpha = 0.11f), Color.Transparent),
+                        radius = 1450f
+                    )
                 )
             )
-        )
+        }
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(if (isFocusMode) 0.dp else 0.dp)) {
             val isLandscape = maxWidth > maxHeight
 
             if (isLandscape) {
-    val isDesktopWide = maxWidth > 1100.dp
-
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        // =====================================
-        // LEFT PANEL
-        // =====================================
-        // =====================================
-Surface(
-    modifier = Modifier
-        .weight(if (isDesktopWide) 1.1f else 1f)
-        .fillMaxHeight(),
-    shape = RoundedCornerShape(32.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.30f),
-    border = BorderStroke(
-        1.dp,
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)
-    )
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp)
-    ) {
-
-        // TOP BAR
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilledTonalIconButton(
-                onClick = {
-                    viewModel.currentTab.value = Tab.Dashboard
-                },
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-    // =====================================
-// VINYL / LYRICS SECTION
-// =====================================
-Box(
-    modifier = Modifier
-        .fillMaxWidth()
-        .weight(0.62f),
-    contentAlignment = Alignment.Center
-) {
-
-    val showLyrics by viewModel.isLyricsVisible
-
-    AnimatedContent(
-        targetState = showLyrics,
-        transitionSpec = {
-            fadeIn(tween(300)) togetherWith
-                fadeOut(tween(220))
-        },
-        label = "lyrics_toggle"
-    ) { lyricsVisible ->
-
-        if (lyricsVisible) {
-
-            LyricsVinylCard(
-                viewModel = viewModel,
-                modifier = Modifier.fillMaxSize()
-            )
-
-        } else {
-
-            AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
-        }
-    }
-}
-
-        
-
-        Spacer(Modifier.height(18.dp))
-
-        if (isDesktopWide) {
-            NowPlayingTelemetryCard(viewModel)
-        }
-    }
-}
-
-       // =====================================
-// RIGHT PANEL
-// =====================================
-Surface(
-    modifier = Modifier
-        .weight(1.1f)
-        .fillMaxHeight(),
-    shape = RoundedCornerShape(32.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.42f),
-    border = BorderStroke(
-        1.dp,
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)
-    ),
-    tonalElevation = 10.dp
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 26.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        // =====================================
-        // HEADER
-        // =====================================
-        NeuralHeaderPlayerControls(viewModel)
-        Spacer(modifier = Modifier.height(50.dp))
-        // =====================================
-        // DESKTOP VINYL ENGINE
-        // =====================================
-        if (isDesktopWide) {
-
-    Spacer(modifier = Modifier.height(50.dp))
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.28f),
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.06f)
-        )
-    ) {
-
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            LargeTrackInfo(
-                item = currentItem
-            )
-        }
-    }
-}
-
-  if (!isDesktopWide) {
-
-           
-// =====================================
-        // TRACK INFO
-        // =====================================
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Text(
-                text = currentItem?.title ?: "Unknown",
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 2,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = currentItem?.artist ?: "Unknown Artist",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-            // NowPlayingTelemetryCard(viewModel)
-        }
-        Spacer(modifier = Modifier.height(30.dp))
-        
-
-        // =====================================
-        // MAIN CONTROLS
-        // =====================================
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-
-                TransportControlsRestored(viewModel)
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // =====================================
-                // SLIDER SECTION
-                // =====================================
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.05f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(
-                            horizontal = 20.dp,
-                            vertical = 18.dp
-                        )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 🚀 FLOATING BACK BUTTON (Absolute Position)
+                    FilledTonalIconButton(
+                        onClick = { viewModel.currentTab.value = Tab.Dashboard },
+                        modifier = Modifier.padding(24.dp).size(52.dp).zIndex(20f),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
                     ) {
-                        PlayerTimeSlider(viewModel)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(24.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // LEFT PANEL
+                        Surface(
+                            modifier = Modifier.weight(1.1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.30f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                                val showLyrics by viewModel.isLyricsVisible
+                                AnimatedContent(
+                                    targetState = if (viewModel.isHarmonyVisible.value) "harmony" else if (showLyrics) "lyrics" else "vinyl",
+                                    label = "playback_switch"
+                                ) { mode ->
+                                    when(mode) {
+                                        "harmony" -> ChordVisualizerScreen(viewModel)
+                                        "lyrics" -> LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize())
+                                        else -> AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
+                                    }
+                                }
+                            }
+                        }
+
+                        // RIGHT PANEL
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .widthIn(max = 500.dp)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.42f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                            tonalElevation = 10.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 22.dp, vertical = 20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                NeuralHeaderPlayerControls(viewModel)
+                                
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(currentItem.title, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(currentItem.subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                }
+                                
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    PlayerTimeSlider(viewModel = viewModel)
+                                    TransportControlsRestored(viewModel)
+                                    NeuralBottomControlsRestored(viewModel)
+                                }
+                                
+                                TransmissionTelemetry(viewModel = viewModel, item = currentItem)
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                NeuralBottomControlsRestored(viewModel)
             }
-        }
 
-        // =====================================
-        // MOBILE/TABLET TELEMETRY
-        // =====================================
-      
 
-        Spacer(modifier = Modifier.height(18.dp))
-
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)
-        )
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        TransmissionTelemetry(
-            viewModel = viewModel,
-            item = currentItem
-        )
-    }
-}
-    }
-}
  else {
                 Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                     NeuralPlayerHeaderSimple(viewModel = viewModel, isLandscape = false)
@@ -374,9 +202,33 @@ Surface(
                                             AppViewModel.VisualizerMode.CIRCULAR -> {
                                                 CircularSpectrumAnalyzer(magnitudes = rtaData)
                                             }
-                                            else -> {
-                                                AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
+                                            AppViewModel.VisualizerMode.RTA -> {
+                                                RtaSpectrumVisualizer(magnitudes = rtaData)
                                             }
+                                            AppViewModel.VisualizerMode.WAVEFORM -> {
+                                                WaveformVisualizer(viewModel = viewModel)
+                                            }
+                                            else -> {
+
+    currentItem?.let {
+
+        AudioVinylEngine(
+            item = it,
+            isPlaying = viewModel.isPlaying.value
+        )
+
+    } ?: Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+
+        Text(
+            text = "No Media",
+            color = Color.White.copy(alpha = 0.5f)
+        )
+    }
+}
+                                            
                                         }
                                     }
                                 }
@@ -463,6 +315,7 @@ Surface(
                 }
             )
         }
+        
     }
 }
 
@@ -517,9 +370,12 @@ fun PlayerTimeSlider(viewModel: AppViewModel) {
                             change.consume()
                             val dragProgress = (change.position.x / size.width).coerceIn(0f, 1f)
                             localValue = dragProgress * totalDur
+                            // Don't seek here to avoid engine lag, only update local UI
+                        },
+                        onDragEnd = { 
+                            isDragging = false
                             viewModel.seekTo(localValue.toLong())
                         },
-                        onDragEnd = { isDragging = false },
                         onDragCancel = { isDragging = false }
                     )
                 }
@@ -563,60 +419,44 @@ private fun progressFraction(current: Long, total: Long): Float = (current / tot
 private fun EmptyLyricsState(
     viewModel: AppViewModel
 ) {
+    val lyricJob = viewModel.backgroundJobs.find { it.name == "Neural Lyrics Sync" }
+    val isSearching = lyricJob != null && lyricJob.status != "NO MATCH FOUND" && lyricJob.status != "FETCH FAILED"
 
-    val infiniteTransition =
-        rememberInfiniteTransition(
-            label = "lyrics_loading"
-        )
-
+    val infiniteTransition = rememberInfiniteTransition(label = "lyrics_loading")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1800,
-                easing = LinearEasing
-            )
+            animation = tween(durationMillis = 1800, easing = LinearEasing)
         ),
         label = "rotation"
     )
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 40.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-
-        Box(
-            modifier = Modifier
-                .size(84.dp)
-                .border(
-                    width = 2.dp,
-                    color = MaterialTheme.colorScheme.primary
-                        .copy(alpha = 0.18f),
-                    shape = CircleShape
-                )
-                .graphicsLayer {
-                    rotationZ = rotation
-                },
-            contentAlignment = Alignment.Center
-        ) {
-
-            CircularProgressIndicator(
-                modifier = Modifier.size(48.dp),
-                strokeWidth = 3.dp,
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary
-                    .copy(alpha = 0.08f)
-            )
+        if (isSearching) {
+            Box(
+                modifier = Modifier.size(84.dp).border(width = 2.dp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), shape = CircleShape)
+                    .graphicsLayer { rotationZ = rotation },
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            }
+        } else {
+            Surface(modifier = Modifier.size(84.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(imageVector = if (lyricJob?.status == "NO MATCH FOUND") Icons.Default.SearchOff else Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(38.dp))
+                }
+            }
         }
 
         Spacer(Modifier.height(28.dp))
 
         Text(
-            text = "Searching Lyrics",
+            text = if (lyricJob?.status == "NO MATCH FOUND") "No Lyrics Found" else if (isSearching) "Searching Lyrics" else "",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -625,13 +465,29 @@ private fun EmptyLyricsState(
         Spacer(Modifier.height(10.dp))
 
         Text(
-            text = "Neural sync engine is analyzing temporal vocal data...",
+            text = when {
+                lyricJob?.status == "NO MATCH FOUND" -> "We couldn't find synchronized lyrics for this track in our neural archive."
+                isSearching -> lyricJob?.status ?: "Neural sync engine is analyzing temporal vocal data..."
+                else -> "Establishing connection to the pEQ metadata repository..."
+            },
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             lineHeight = 22.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-                .copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
+        
+        if (!isSearching && lyricJob?.status == "NO MATCH FOUND") {
+            Spacer(Modifier.height(32.dp))
+            Button(
+                onClick = { viewModel.webSearchLyrics() },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Language, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("SEARCH ONLINE", fontWeight = FontWeight.Black, fontSize = 11.sp)
+            }
+        }
     }
 }
 
@@ -896,6 +752,7 @@ fun TransportControlsRestored(viewModel: AppViewModel) {
         }
         FilledTonalIconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(56.dp)) { Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(30.dp)) }
         SmallTransportButton(icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, active = isFavorite) { viewModel.toggleFavorite(item) }
+        SmallTransportButton(icon = Icons.Default.AutoAwesome, active = viewModel.isAiUpscalingEnabled.value) { viewModel.toggleAiUpscaling() }
     }
 }
 
@@ -950,8 +807,8 @@ fun NeuralBottomControlsRestored(viewModel: AppViewModel) {
 }
         }
         SmallTransportButton(icon = Icons.Default.Speed, active = viewModel.playbackSpeed.value != 1f) { viewModel.cyclePlaybackSpeed() }
-        SmallTransportButton(icon = Icons.Default.VpnKey, active = viewModel.isLockScreenMode.value) {
-            viewModel.toggleLockScreenMode()
+        SmallTransportButton(icon = Icons.Default.VpnKey, active = viewModel.isFocusMode.value) {
+            viewModel.toggleFocusMode()
         }
     }
 }
@@ -964,14 +821,15 @@ fun NeuralHeaderPlayerControls(viewModel: AppViewModel) {
             viewModel.toggleAbRepeat()
             if (!viewModel.abRepeatActive.value) { viewModel.abRepeatPointA.value = -1L; viewModel.abRepeatPointB.value = -1L; viewModel.updateLoopPoints(null, null) }
         }
-        PlayerActionButton(icon = Icons.Default.AutoAwesome, active = viewModel.visualizerMode.value != AppViewModel.VisualizerMode.BARS) {
-            val modes = AppViewModel.VisualizerMode.entries
-            viewModel.visualizerMode.value = modes[(viewModel.visualizerMode.value.ordinal + 1) % modes.size]
-        }
+        // PlayerActionButton(icon = Icons.Default.AutoAwesome, active = viewModel.visualizerMode.value != AppViewModel.VisualizerMode.BARS) {
+        //     val modes = AppViewModel.VisualizerMode.entries
+        //     viewModel.visualizerMode.value = modes[(viewModel.visualizerMode.value.ordinal + 1) % modes.size]
+        // }
         PlayerActionButton(icon = Icons.Default.Timer, active = viewModel.sleepTimerActive.value) { viewModel.showSleepTimerSheet.value = true }
         PlayerActionButton(icon = Icons.Default.ContentCut, active = viewModel.showCutter.value) { viewModel.showCutter.value = !viewModel.showCutter.value }
+        PlayerActionButton(icon = if (viewModel.isHarmonyVisible.value) Icons.Default.MusicNote else Icons.Default.Audiotrack, active = viewModel.isHarmonyVisible.value) { viewModel.isHarmonyVisible.value = !viewModel.isHarmonyVisible.value }
         PlayerActionButton(icon = if (viewModel.isMicMonitoringEnabled.value) Icons.Default.MicExternalOn else Icons.Default.MicExternalOff, active = viewModel.isMicMonitoringEnabled.value) { viewModel.toggleMicMonitoring() }
-        PlayerActionButton(icon = Icons.Default.QueueMusic, active = viewModel.showQueueDrawer.value) { viewModel.showQueueDrawer.value = !viewModel.showQueueDrawer.value }
+        
     }
 }
 
@@ -1107,18 +965,7 @@ fun LargeTrackInfo(item: org.audiocular.peq.app.data.pEQMediaItem) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Surface(
-        //     modifier = Modifier.size(320.dp).shadow(24.dp, RoundedCornerShape(42.dp)),
-        //     shape = RoundedCornerShape(42.dp),
-        //     color = MaterialTheme.colorScheme.surfaceVariant
-        // ) {
-        //     pEQImage(
-        //         data = item.thumbnail,
-        //         modifier = Modifier.fillMaxSize(),
-        //         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-        //         mediaType = item.type
-        //     )
-        // }
+      
         
         Spacer(Modifier.height(28.dp))
         

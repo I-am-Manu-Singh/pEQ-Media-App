@@ -164,10 +164,20 @@ private fun PlaylistDetailScreen(viewModel: AppViewModel, playlistName: String, 
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalIconButton(onClick = { viewModel.shufflePlaylistAndPlay(playlistName) }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Shuffle, null, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Shuffle, null, modifier = Modifier.size(18.dp))
                 }
-                FilledTonalIconButton(onClick = { viewModel.openPlaylistAsQueue(playlistName) }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.QueueMusic, null, modifier = Modifier.size(20.dp))
+                
+                Spacer(Modifier.width(8.dp))
+                
+                Button(
+                    onClick = { viewModel.openPlaylistAsQueue(playlistName) },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("START AS QUEUE", fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
             }
         }

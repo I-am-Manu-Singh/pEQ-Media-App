@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -83,7 +83,7 @@ fun VideoControlOverlay(
                     Text(gestureLabel, fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = gestureValue,
+                        progress = { gestureValue },
                         modifier = Modifier.width(120.dp).height(4.dp),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
@@ -197,7 +197,7 @@ fun VideoControlOverlay(
                             badge = {
                                 Badge {
                                     Text(
-                                        "${viewModel.playbackSpeed}x",
+                                        "${viewModel.playbackSpeed.value}x",
                                         fontSize = 10.sp
                                     )
                                 }

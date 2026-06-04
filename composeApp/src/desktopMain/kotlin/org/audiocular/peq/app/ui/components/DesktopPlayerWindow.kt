@@ -63,7 +63,6 @@ class DesktopPlayerWindow(
 
         val videoComponent =
             engine.getVideoComponent()
-                as EmbeddedMediaPlayerComponent
 
         videoContainer.background =
             Color.BLACK

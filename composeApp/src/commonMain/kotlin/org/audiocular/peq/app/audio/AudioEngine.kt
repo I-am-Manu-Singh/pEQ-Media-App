@@ -9,6 +9,7 @@ interface AudioEngine {
     fun playTrack(url: String, title: String? = null, artist: String? = null, thumbnail: String? = null)
     fun setNeuralSaturation(enabled: Boolean)
     fun loadTrack(url: String, title: String? = null, artist: String? = null, thumbnail: String? = null)
+    fun loadStems(stems: Map<String, String>)
     fun setVideoSurface(surface: Any?)
     fun setVideoScalingMode(mode: Int)
     fun setAudioDelay(ms: Long)
@@ -102,7 +103,12 @@ fun nextTrack() {}
 
 fun previousTrack() {}
 
+    fun getDspLoad(): Float = 0f
+    fun isInitialized(): Boolean = true
+    fun getLatency(): Int = 0
+    fun getRegistry(): Map<String, String> = emptyMap()
     fun release()
+    suspend fun probeMedia(url: String): Map<String, List<String>>
 }
 
 expect fun getAudioEngine(): AudioEngine

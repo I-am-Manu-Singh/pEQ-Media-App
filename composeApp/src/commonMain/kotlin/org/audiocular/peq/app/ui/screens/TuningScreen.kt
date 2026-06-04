@@ -33,6 +33,7 @@ import org.audiocular.peq.app.ui.components.*
 import kotlin.math.*
 import androidx.compose.ui.text.font.FontFamily
 import org.audiocular.peq.app.data.Preset
+import org.audiocular.peq.app.data.EQBand
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TuningScreen(
@@ -87,16 +88,7 @@ fun TuningScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item {
-                Column {
-                    Text(text = "TUNING", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, color = primaryColor)
-                    Spacer(Modifier.height(6.dp))
-                    Text(text = "AUDIO SUITE", fontSize = 34.sp, fontWeight = FontWeight.Black, color = colorScheme.onSurface)
-                    Spacer(Modifier.height(8.dp))
-                    Text(text = "PARAMETRIC DSP • AUTO-EQ • CONVOLUTION ENGINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colorScheme.onSurface.copy(alpha = 0.42f), letterSpacing = 1.sp)
-                }
-            }
-
+            
             item {
                 NowPlayingTelemetryCard(viewModel, primaryColor)
             }
@@ -308,8 +300,18 @@ private fun ParametricEqSection(
         "1k", "2k", "4k", "8k", "16k"
     )
 
-    val livePreset = remember {
-        Preset("LIVE", emptyList())
+    val livePreset = remember(viewModel.eqGains.toList()) {
+        Preset(
+            name = "LIVE",
+            bands = viewModel.eqFrequencies.indices.map { i ->
+                val freq = viewModel.eqFrequencies[i].replace("k", "000").toFloat()
+                EQBand(
+                    frequency = freq,
+                    gain = viewModel.eqGains[i],
+                    qFactor = viewModel.eqQs[i]
+                )
+            }
+        )
     }
 
     Column(
@@ -457,7 +459,7 @@ private fun ParametricEqSection(
         ) {
 
             OutlinedButton(
-                onClick = { },
+                onClick = { viewModel.resetEq() },
 
                 modifier = Modifier.weight(1f),
 
@@ -485,7 +487,7 @@ private fun ParametricEqSection(
             }
 
             Button(
-                onClick = { },
+                onClick = { viewModel.optimizeAudioForRoom() },
 
                 modifier = Modifier.weight(1f),
 
@@ -687,6 +689,7 @@ private fun SignalTopologySection(
 
             LiveSpectrumVisualizer(
                 viewModel = viewModel,
+                height = 120.dp,
                 primaryColor = primaryColor
             )
         }
@@ -809,8 +812,8 @@ private fun AutoEqSection(
 
                         Surface(
                             onClick = {
-                                viewModel
-                                    .applyAutoEqProfile(profile)
+                                viewModel.applyAutoEqProfile(profile)
+                                viewModel.showToast("Profile Applied: ${profile.name}")
                             },
 
                             shape = RoundedCornerShape(16.dp),

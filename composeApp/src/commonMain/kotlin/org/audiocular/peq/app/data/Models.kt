@@ -48,7 +48,9 @@ data class pEQMediaItem(
     val videoHeight: Int = 0,      // ✅ Required
     val playCount: Int = 0,        // ✅ Tracking Popularity
     val isStream: Boolean = false,  // ✅ Web Streaming Support
-    val lyrics: String? = null     // 📝 Embedded Lyrics
+    val lyrics: String? = null,     // 📝 Embedded Lyrics
+    val bpm: Float? = null,        // 🧠 Neural BPM
+    val key: String? = null        // 🧠 Neural Key
 ) {
     val fileName: String get() = path.substringAfterLast("/")
     val displaySize: String get() = "${sizeBytes / 1024 / 1024.0f}MB"
@@ -150,6 +152,7 @@ data class AutoEqProfile(
     val name: String,
     val brand: String,
     val type: String,
+    val gains: List<Float>? = null,
     val parametricValues: Map<String, Float> = emptyMap()
 )
 
@@ -170,4 +173,35 @@ data class DrumKit(
 data class DrumTutorial(
     val name: String, 
     val steps: List<List<String>> = emptyList()
+)
+@Serializable
+data class StreamFormats(
+
+    val videoResolutions: List<String>,
+
+    val audioQualities: List<String>
+
+)
+@Serializable
+data class DownloadJob(
+    val id: String,
+    val url: String,
+    val title: String,
+    val progress: Float,
+    val status: String,
+    val sizeBytes: Long = 0,
+    val speedBytesPerSec: Long = 0,
+    val etaSeconds: Long = 0,
+    val filePath: String? = null,
+    val type: MediaType = MediaType.AUDIO
+)
+
+@Serializable
+data class YoutubeResult(
+    val id: String,
+    val title: String,
+    val author: String,
+    val duration: String,
+    val thumbnailUrl: String,
+    val url: String
 )

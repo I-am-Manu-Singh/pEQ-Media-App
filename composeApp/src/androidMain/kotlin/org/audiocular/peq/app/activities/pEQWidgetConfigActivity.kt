@@ -19,12 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.Title
-import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,8 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,8 +53,9 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 AppWidgetManager.INVALID_APPWIDGET_ID
             ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
 
-        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
-
+        if (appWidgetId ==
+            AppWidgetManager.INVALID_APPWIDGET_ID
+        ) {
             finish()
             return
         }
@@ -82,71 +80,61 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
         val context = this
 
-        val prefs = remember {
+        val configuration = LocalConfiguration.current
+        val compactMode = configuration.screenWidthDp < 390
 
+        val prefs = remember {
             context.getSharedPreferences(
                 "peq_widget_settings_$appWidgetId",
                 Context.MODE_PRIVATE
             )
         }
 
+        // =====================================================
+        // STATES
+        // =====================================================
+
         var showTitle by remember {
             mutableStateOf(
-                prefs.getBoolean(
-                    "show_title",
-                    true
-                )
+                prefs.getBoolean("show_title", true)
             )
         }
 
         var showArtist by remember {
             mutableStateOf(
-                prefs.getBoolean(
-                    "show_artist",
-                    true
-                )
+                prefs.getBoolean("show_artist", true)
             )
         }
 
         var showArt by remember {
             mutableStateOf(
-                prefs.getBoolean(
-                    "show_art",
-                    true
-                )
+                prefs.getBoolean("show_art", true)
             )
         }
 
         var showFavorite by remember {
             mutableStateOf(
-                prefs.getBoolean(
-                    "show_favorite",
-                    true
-                )
+                prefs.getBoolean("show_favorite", true)
             )
         }
 
         var showShuffle by remember {
             mutableStateOf(
-                prefs.getBoolean(
-                    "show_shuffle",
-                    true
-                )
+                prefs.getBoolean("show_shuffle", true)
             )
         }
 
         var glassIntensity by remember {
             mutableFloatStateOf(
-                prefs.getFloat(
-                    "glass_intensity",
-                    0.85f
-                )
+                prefs.getFloat("glass_intensity", 0.85f)
             )
         }
 
-        val yellow = remember {
-            Color(0xFFFFD600)
-        }
+        val yellow = Color(0xFFFFD54F)
+
+        // =====================================================
+        // ROOT
+        // =====================================================
 
         Box(
             modifier = Modifier
@@ -155,16 +143,16 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     Brush.verticalGradient(
                         listOf(
                             Color(0xFF050505),
-                            Color(0xFF101010),
-                            Color(0xFF151515)
+                            Color(0xFF0C0C0C),
+                            Color(0xFF141414)
                         )
                     )
                 )
         ) {
 
-            // =====================================================
-            // BACKGROUND GLOW
-            // =====================================================
+            // =================================================
+            // GLOW
+            // =================================================
 
             Box(
                 modifier = Modifier
@@ -176,7 +164,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     .background(
                         Brush.radialGradient(
                             listOf(
-                                yellow.copy(alpha = 0.18f),
+                                yellow.copy(alpha = 0.14f),
                                 Color.Transparent
                             )
                         ),
@@ -190,19 +178,24 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     .verticalScroll(
                         rememberScrollState()
                     )
-                    .padding(20.dp)
+                    .padding(
+                        horizontal =
+                            if (compactMode) 16.dp else 20.dp,
+                        vertical = 20.dp
+                    )
             ) {
 
-                // =================================================
+                // =============================================
                 // HEADER
-                // =================================================
+                // =============================================
 
                 Text(
                     text = "pEQ Widget",
 
                     color = Color.White,
 
-                    fontSize = 30.sp,
+                    fontSize =
+                        if (compactMode) 26.sp else 32.sp,
 
                     fontWeight = FontWeight.Black
                 )
@@ -210,18 +203,19 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Premium neural playback dashboard",
+                    text = "Adaptive neural playback interface",
 
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = Color.White.copy(alpha = 0.58f),
 
-                    fontSize = 14.sp
+                    fontSize =
+                        if (compactMode) 12.sp else 14.sp
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // =================================================
+                // =============================================
                 // PREVIEW
-                // =================================================
+                // =============================================
 
                 WidgetPreviewCard(
                     showTitle = showTitle,
@@ -232,16 +226,16 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     glassIntensity = glassIntensity
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // =================================================
+                // =============================================
                 // SETTINGS CARD
-                // =================================================
+                // =============================================
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
 
-                    shape = RoundedCornerShape(34.dp),
+                    shape = RoundedCornerShape(30.dp),
 
                     color = Color.White.copy(alpha = 0.04f),
 
@@ -252,7 +246,9 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 ) {
 
                     Column(
-                        modifier = Modifier.padding(20.dp)
+                        modifier = Modifier.padding(
+                            if (compactMode) 16.dp else 20.dp
+                        )
                     ) {
 
                         Text(
@@ -269,7 +265,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                         ConfigToggleCard(
                             title = "Track Title",
-                            subtitle = "Display song title",
+                            subtitle = "Display current media title",
                             icon = Icons.Default.Title,
                             checked = showTitle,
                             accent = yellow
@@ -277,7 +273,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showTitle = it
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ConfigToggleCard(
                             title = "Artist Name",
@@ -289,7 +285,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showArtist = it
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ConfigToggleCard(
                             title = "Album Artwork",
@@ -301,11 +297,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showArt = it
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ConfigToggleCard(
                             title = "Favorite Button",
-                            subtitle = "Show favorite control",
+                            subtitle = "Show favorite shortcut",
                             icon = Icons.Default.Favorite,
                             checked = showFavorite,
                             accent = yellow
@@ -313,11 +309,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showFavorite = it
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ConfigToggleCard(
                             title = "Shuffle Button",
-                            subtitle = "Show shuffle control",
+                            subtitle = "Enable shuffle shortcut",
                             icon = Icons.Default.Shuffle,
                             checked = showShuffle,
                             accent = yellow
@@ -325,23 +321,43 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showShuffle = it
                         }
 
-                        Spacer(modifier = Modifier.height(28.dp))
+                        Spacer(modifier = Modifier.height(26.dp))
 
-                        // =========================================
+                        // =====================================
                         // GLASS INTENSITY
-                        // =========================================
+                        // =====================================
 
-                        Text(
-                            text = "Glass Intensity",
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.SpaceBetween,
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
 
-                            color = Color.White,
+                            Text(
+                                text = "Glass Intensity",
 
-                            fontWeight = FontWeight.Bold,
+                                color = Color.White,
 
-                            fontSize = 14.sp
-                        )
+                                fontWeight = FontWeight.Bold,
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                                fontSize = 14.sp
+                            )
+
+                            Text(
+                                text =
+                                    "${(glassIntensity * 100).toInt()}%",
+
+                                color = yellow,
+
+                                fontSize = 12.sp,
+
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Slider(
                             value = glassIntensity,
@@ -350,44 +366,57 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                                 glassIntensity = it
                             },
 
+                            valueRange = 0.25f..1f,
+
                             colors = SliderDefaults.colors(
                                 thumbColor = yellow,
                                 activeTrackColor = yellow,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.08f)
+                                inactiveTrackColor =
+                                    Color.White.copy(alpha = 0.08f)
                             )
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = "${(glassIntensity * 100).toInt()}%",
-
-                            color = Color.White.copy(alpha = 0.5f),
-
-                            modifier = Modifier.fillMaxWidth(),
-
-                            textAlign = TextAlign.End
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(26.dp))
 
-                // =================================================
+                // =============================================
                 // APPLY BUTTON
-                // =================================================
+                // =============================================
 
                 Button(
                     onClick = {
 
                         prefs.edit()
-                            .putBoolean("show_title", showTitle)
-                            .putBoolean("show_artist", showArtist)
-                            .putBoolean("show_art", showArt)
-                            .putBoolean("show_favorite", showFavorite)
-                            .putBoolean("show_shuffle", showShuffle)
-                            .putFloat("glass_intensity", glassIntensity)
+                            .putBoolean(
+                                "show_title",
+                                showTitle
+                            )
+                            .putBoolean(
+                                "show_artist",
+                                showArtist
+                            )
+                            .putBoolean(
+                                "show_art",
+                                showArt
+                            )
+                            .putBoolean(
+                                "show_favorite",
+                                showFavorite
+                            )
+                            .putBoolean(
+                                "show_shuffle",
+                                showShuffle
+                            )
+                            .putFloat(
+                                "glass_intensity",
+                                glassIntensity
+                            )
                             .apply()
+
+                        // =====================================
+                        // FORCE WIDGET UPDATE
+                        // =====================================
 
                         val manager =
                             AppWidgetManager.getInstance(context)
@@ -417,7 +446,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                         context.sendBroadcast(updateIntent)
 
-                        val result =
+                        // =====================================
+                        // RESULT
+                        // =====================================
+
+                        val resultIntent =
                             Intent().apply {
 
                                 putExtra(
@@ -428,7 +461,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                         setResult(
                             Activity.RESULT_OK,
-                            result
+                            resultIntent
                         )
 
                         finish()
@@ -436,9 +469,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(62.dp),
+                        .height(
+                            if (compactMode) 58.dp else 64.dp
+                        ),
 
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(22.dp),
 
                     colors = ButtonDefaults.buttonColors(
                         containerColor = yellow
@@ -454,7 +489,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Text(
-                        text = "INITIALIZE WIDGET",
+                        text = "APPLY WIDGET",
 
                         color = Color.Black,
 
@@ -464,7 +499,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
             }
         }
     }
@@ -483,26 +518,26 @@ class pEQWidgetConfigActivity : ComponentActivity() {
         glassIntensity: Float
     ) {
 
-        val yellow = remember {
-            Color(0xFFFFD600)
-        }
+        val configuration = LocalConfiguration.current
+        val compactMode = configuration.screenWidthDp < 390
+
+        val yellow = Color(0xFFFFD54F)
 
         val alpha by animateFloatAsState(
             targetValue = glassIntensity,
             animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy
+                dampingRatio =
+                    Spring.DampingRatioMediumBouncy
             ),
-            label = ""
+            label = "preview_alpha"
         )
 
         Box {
 
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 150.dp),
+                modifier = Modifier.fillMaxWidth(),
 
-                shape = RoundedCornerShape(32.dp),
+                shape = RoundedCornerShape(30.dp),
 
                 color = Color(0xFF111111).copy(
                     alpha = 0.82f + (alpha * 0.08f)
@@ -514,24 +549,250 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 )
             ) {
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(18.dp),
-
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(
+                        if (compactMode) 16.dp else 20.dp
+                    )
                 ) {
 
-                    if (showArt) {
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        if (showArt) {
+
+                            Box(
+                                modifier = Modifier
+                                    .size(
+                                        if (compactMode) {
+                                            70.dp
+                                        } else {
+                                            86.dp
+                                        }
+                                    )
+                                    .clip(
+                                        RoundedCornerShape(24.dp)
+                                    )
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                yellow,
+                                                Color(0xFFFFB300)
+                                            )
+                                        )
+                                    ),
+
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+
+                                Text(
+                                    text = "pEQ",
+
+                                    color = Color.Black,
+
+                                    fontWeight = FontWeight.Black,
+
+                                    fontSize =
+                                        if (compactMode) 14.sp
+                                        else 18.sp
+                                )
+                            }
+
+                            Spacer(
+                                modifier = Modifier.width(
+                                    if (compactMode) 12.dp
+                                    else 16.dp
+                                )
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            if (showTitle) {
+
+                                Text(
+                                    text =
+                                        "Back To December",
+
+                                    color = Color.White,
+
+                                    maxLines = 1,
+
+                                    overflow =
+                                        TextOverflow.Ellipsis,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    fontSize =
+                                        if (compactMode) 14.sp
+                                        else 16.sp
+                                )
+                            }
+
+                            if (showArtist) {
+
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
+
+                                Text(
+                                    text = "Taylor Swift",
+
+                                    color = yellow,
+
+                                    fontSize =
+                                        if (compactMode) 11.sp
+                                        else 13.sp,
+
+                                    maxLines = 1
+                                )
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(
+                                    if (compactMode) 12.dp
+                                    else 18.dp
+                                )
+                            )
+
+                            // =============================
+                            // CONTROLS
+                            // =============================
+
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                verticalAlignment =
+                                    Alignment.CenterVertically,
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween
+                            ) {
+
+                                Row(
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+
+                                    if (showShuffle) {
+
+                                        CircleButton(
+                                            size =
+                                                if (compactMode) {
+                                                    30.dp
+                                                } else {
+                                                    34.dp
+                                                },
+
+                                            color =
+                                                Color.White.copy(
+                                                    alpha = 0.08f
+                                                )
+                                        )
+                                    }
+
+                                    Spacer(
+                                        modifier = Modifier.width(8.dp)
+                                    )
+
+                                    CircleButton(
+                                        size =
+                                            if (compactMode) {
+                                                30.dp
+                                            } else {
+                                                34.dp
+                                            },
+
+                                        color =
+                                            Color.White.copy(
+                                                alpha = 0.08f
+                                            )
+                                    )
+                                }
+
+                                CircleButton(
+                                    size =
+                                        if (compactMode) {
+                                            46.dp
+                                        } else {
+                                            54.dp
+                                        },
+
+                                    color = yellow
+                                )
+
+                                Row(
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+
+                                    CircleButton(
+                                        size =
+                                            if (compactMode) {
+                                                30.dp
+                                            } else {
+                                                34.dp
+                                            },
+
+                                        color =
+                                            Color.White.copy(
+                                                alpha = 0.08f
+                                            )
+                                    )
+
+                                    if (showFavorite) {
+
+                                        Spacer(
+                                            modifier = Modifier.width(8.dp)
+                                        )
+
+                                        CircleButton(
+                                            size =
+                                                if (compactMode) {
+                                                    30.dp
+                                                } else {
+                                                    34.dp
+                                                },
+
+                                            color =
+                                                Color.White.copy(
+                                                    alpha = 0.08f
+                                                )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // =============================
+                    // PROGRESS
+                    // =============================
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Color.White.copy(alpha = 0.06f)
+                            )
+                    ) {
 
                         Box(
                             modifier = Modifier
-                                .size(88.dp)
-                                .clip(
-                                    RoundedCornerShape(28.dp)
-                                )
+                                .fillMaxWidth(0.62f)
+                                .fillMaxHeight()
                                 .background(
-                                    Brush.linearGradient(
+                                    Brush.horizontalGradient(
                                         listOf(
                                             yellow,
                                             Color(0xFFFFB300)
@@ -540,135 +801,36 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                                 )
                         )
                     }
-
-                    if (showArt) {
-                        Spacer(modifier = Modifier.width(18.dp))
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-
-                        if (showTitle) {
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.72f)
-                                    .height(16.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color.White)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (showArtist) {
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.48f)
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(
-                                        yellow.copy(alpha = 0.75f)
-                                    )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Row(
-                            modifier = Modifier.horizontalScroll(
-                                rememberScrollState()
-                            ),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            if (showShuffle) {
-
-                                CircleButton(
-                                    size = 36.dp,
-                                    color = Color.White.copy(alpha = 0.08f)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            CircleButton(
-                                size = 36.dp,
-                                color = Color.White.copy(alpha = 0.08f)
-                            )
-
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            CircleButton(
-                                size = 52.dp,
-                                color = yellow
-                            )
-
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            CircleButton(
-                                size = 36.dp,
-                                color = Color.White.copy(alpha = 0.08f)
-                            )
-
-                            if (showFavorite) {
-
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                CircleButton(
-                                    size = 36.dp,
-                                    color = Color.White.copy(alpha = 0.08f)
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
-            // =====================================================
+            // =============================================
             // WATERMARK
-            // =====================================================
+            // =============================================
 
             Text(
                 text = "pEQ",
 
-                color = yellow.copy(alpha = 0.05f),
+                color = yellow.copy(alpha = 0.04f),
 
-                fontSize = 64.sp,
+                fontSize =
+                    if (compactMode) 52.sp else 68.sp,
 
                 fontWeight = FontWeight.Black,
 
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(
-                        end = 12.dp,
-                        top = 4.dp
-                    )
-            )
-
-            // =====================================================
-            // BOTTOM PROGRESS GLOW
-            // =====================================================
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .align(Alignment.BottomCenter)
-                    .clip(
-                        RoundedCornerShape(
-                            bottomStart = 32.dp,
-                            bottomEnd = 32.dp
-                        )
-                    )
-                    .background(
-                        yellow.copy(alpha = 0.18f)
+                        end = 10.dp,
+                        top = 6.dp
                     )
             )
         }
     }
+
+    // =========================================================
+    // BUTTON
+    // =========================================================
 
     @Composable
     private fun CircleButton(
@@ -705,13 +867,13 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 } else {
                     Color.White.copy(alpha = 0.03f)
                 },
-            label = ""
+            label = "toggle_background"
         )
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
 
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(22.dp),
 
             color = background,
 
@@ -737,7 +899,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(
                             accent.copy(alpha = 0.14f)
@@ -776,9 +938,15 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                         color = Color.White.copy(alpha = 0.55f),
 
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+
+                        maxLines = 2,
+
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Switch(
                     checked = checked,
@@ -789,7 +957,8 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                         checkedThumbColor = Color.Black,
                         checkedTrackColor = accent,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color.White.copy(alpha = 0.15f)
+                        uncheckedTrackColor =
+                            Color.White.copy(alpha = 0.15f)
                     )
                 )
             }

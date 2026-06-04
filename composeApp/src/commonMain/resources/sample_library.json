@@ -1,0 +1,6 @@
+{
+    "KICKS": ["Neural Kick 1", "Industrial Kick 2", "Lofi Thump", "808 Kick Deep", "Future Sub"],
+    "SNARES": ["Neural Snare 1", "Grime Clap", "Retro Snap", "Vintage Crack", "Cyber Hit"],
+    "HATS": ["Neural Hat 1", "Industrial Shaker", "Lofi Tick", "Sharp Open", "Digital Shimmer"],
+    "PERC": ["Woodblock", "Cowbell", "Tambourine", "Bongo High", "Bongo Low"]
+}

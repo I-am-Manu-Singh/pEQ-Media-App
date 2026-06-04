@@ -625,13 +625,13 @@ private fun CompactMediaCard(item: pEQMediaItem, onClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Surface(modifier = Modifier.fillMaxWidth().aspectRatio(1f), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                if (item.thumbnail != null) {
-                    pEQImage(data = item.thumbnail, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, mediaType = item.type)
-                } else {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Album, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                    }
-                }
+                pEQImage(
+                    data = item.thumbnail,
+                    fallbackPath = item.path,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    mediaType = item.type
+                )
             }
             Spacer(Modifier.height(12.dp))
             Text(item.title, fontSize = 13.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)

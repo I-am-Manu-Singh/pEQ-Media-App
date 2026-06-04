@@ -418,7 +418,8 @@ class DesktopFileScanner : pEQFileScanner {
      * THUMBNAILS
      */
     private fun findThumbnail(
-        mediaFile: File
+        mediaFile: File,
+        media: uk.co.caprica.vlcj.media.Media? = null
     ): String? {
 
         val folder =
@@ -450,6 +451,17 @@ class DesktopFileScanner : pEQFileScanner {
             ) {
 
                 return sameName.absolutePath
+            }
+        }
+
+        /*
+         * VLC EMBEDDED ARTWORK
+         */
+        val vlcArt = media?.meta()?.get(Meta.ARTWORK_URL)
+        if (!vlcArt.isNullOrBlank()) {
+            val artPath = vlcArt.replace("file://", "")
+            if (File(artPath).exists()) {
+                return artPath
             }
         }
 
@@ -594,6 +606,16 @@ class DesktopFileScanner : pEQFileScanner {
 
         } catch (_: Exception) {
 
+            null
+        }
+    }
+
+    override fun readResourceContent(
+        name: String
+    ): String? {
+        return try {
+            this::class.java.classLoader.getResourceAsStream(name)?.bufferedReader()?.use { it.readText() }
+        } catch (_: Exception) {
             null
         }
     }

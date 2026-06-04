@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.audiocular.peq.app.ui.components.ChordVisualizer
 import org.audiocular.peq.app.ui.components.NowPlayingTelemetryCard
+import org.audiocular.peq.app.ui.components.*
 import org.audiocular.peq.app.ui.viewmodel.*
 
 @Composable
@@ -56,24 +57,7 @@ fun pEQLearnScreen(
 
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            item {
-                Column {
-                    Text(
-                        text = "LEARN",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        color = primaryColor,
-                        letterSpacing = 2.sp
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "RHYTHM • TRAINING • ANALYSIS",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-            }
+            
 
             item {
                 NowPlayingTelemetryCard(viewModel, primaryColor)
@@ -85,10 +69,15 @@ fun pEQLearnScreen(
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             SpectralFluxOverlay(viewModel, primaryColor)
                             RhythmLabSection(viewModel, primaryColor)
+                            TuningMasterSection(viewModel, primaryColor)
+                            StrobeTunerSection(
+                                viewModel,
+                                primaryColor
+                            )
                         }
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             PerformanceAcademySection(viewModel, primaryColor)
-                            TuningMasterSection(viewModel, primaryColor)
+                           
                         }
                     }
                 }
@@ -97,6 +86,27 @@ fun pEQLearnScreen(
                 item { RhythmLabSection(viewModel, primaryColor) }
                 item { PerformanceAcademySection(viewModel, primaryColor) }
                 item { TuningMasterSection(viewModel, primaryColor) }
+                item {StrobeTunerSection(
+                viewModel,
+                primaryColor
+            )}
+            }
+
+            item {
+                Button(
+                   onClick = {
+
+    viewModel.showDrumLibrary.value = true
+
+},
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Icon(Icons.Default.MusicVideo, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Spacer(Modifier.width(12.dp))
+                    Text("OPEN DRUM REPOSITORY", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
 
             item {
@@ -268,95 +278,81 @@ private fun SpectralFluxOverlay(
         ) {
 
             ChordVisualizer(
-                chord = viewModel.detectedChord.value,
+                chord = viewModel.detectedChord.value ?: "READY",
+                guitarShapes = viewModel.chordLibrary["guitar"] ?: emptyMap(),
+                pianoShapes = viewModel.chordLibrary["piano"] ?: emptyMap(),
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) 
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("CURRENT PITCH", fontSize = 8.sp, fontWeight = FontWeight.Black, color = primaryColor.copy(alpha = 0.6f), letterSpacing = 1.sp)
+                    Text("${viewModel.detectedPitch.floatValue.toInt()} Hz", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color.White)
+                }
+                
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("BPM", fontSize = 8.sp, fontWeight = FontWeight.Black, color = primaryColor.copy(alpha = 0.6f))
+                        Text("${viewModel.detectedBpm.floatValue.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("KEY", fontSize = 8.sp, fontWeight = FontWeight.Black, color = primaryColor.copy(alpha = 0.6f))
+                        Text(viewModel.currentKey.value, fontSize = 14.sp, fontWeight = FontWeight.Black, color = primaryColor)
+                    }
+                }
+            }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.30f),
-                                Color.Black.copy(alpha = 0.14f)
-                            )
-                        )
-                    )
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Color.Black.copy(alpha = 0.2f))
                     .border(
                         1.dp,
-                        primaryColor.copy(alpha = 0.08f),
-                        RoundedCornerShape(22.dp)
+                        primaryColor.copy(alpha = 0.12f),
+                        RoundedCornerShape(26.dp)
                     )
             ) {
-
-                Canvas(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-
-                    val data = viewModel.rtaData.value
-
-                    if (data.isNotEmpty()) {
-
-                        val width = size.width / data.size
-
-                        data.forEachIndexed { i, value ->
-
-                            drawRoundRect(
-
-                                brush = Brush.verticalGradient(
-                                    listOf(
-                                        primaryColor,
-                                        primaryColor.copy(alpha = 0.1f),
-                                        Color.Transparent
-                                    )
-                                ),
-
-                                topLeft =
-                                    androidx.compose.ui.geometry.Offset(
-                                        i * width,
-                                        size.height * (1f - value)
-                                    ),
-
-                                size =
-                                    androidx.compose.ui.geometry.Size(
-                                        width - 3f,
-                                        size.height * value
-                                    ),
-
-                                cornerRadius =
-                                    androidx.compose.ui.geometry.CornerRadius(
-                                        8f,
-                                        8f
-                                    ),
-
-                                alpha = 0.8f
-                            )
-                        }
-                    }
-                }
+                LiveSpectrumVisualizer(
+                    viewModel = viewModel,
+                    height = 220.dp,
+                    primaryColor = primaryColor
+                )
 
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(16.dp)
+                        .padding(20.dp)
                 ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = primaryColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "NEURAL HARMONIC FLUX",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black,
+                            color = primaryColor,
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = "LIVE FREQUENCY FLUX",
-                        fontSize = 9.sp,
+                        text = viewModel.detectedChord.value ?: "READY",
+                        fontSize = 32.sp,
                         fontWeight = FontWeight.Black,
-                        color = primaryColor
+                        color = Color.White
                     )
-
-                    Spacer(Modifier.height(4.dp))
-
+                    
                     Text(
-                        text = "${viewModel.detectedPitch.value.toInt()} Hz",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black
+                        text = "DEVIATION: ${viewModel.centsDeviation.intValue} CENTS",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.4f)
                     )
                 }
             }
@@ -552,7 +548,7 @@ private fun PerformanceAcademySection(
                     items(viewModel.drumKits) { kit ->
 
                         val selected =
-                            viewModel.selectedDrumKit.value == kit
+                            viewModel.selectedDrumKit.value?.name == kit.name
 
                         Surface(
 
@@ -1092,7 +1088,7 @@ private fun PerformanceAcademySection(
 
                         Text(
                             text =
-                                viewModel.selectedDrumKit.value.name
+                                (viewModel.selectedDrumKit.value?.name ?: "IDLE")
                                     .uppercase(),
 
                             fontSize = 11.sp,
@@ -1116,7 +1112,7 @@ private fun PerformanceAcademySection(
 
                         Text(
                             text =
-                                "${viewModel.selectedDrumKit.value.labels.size}/16",
+                                "${viewModel.selectedDrumKit.value?.labels?.size ?: 0}/16",
 
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Black
@@ -1129,10 +1125,7 @@ private fun PerformanceAcademySection(
                 color = primaryColor.copy(alpha = 0.08f)
             )
 
-            StrobeTunerSection(
-                viewModel,
-                primaryColor
-            )
+            
         }
     }
 }

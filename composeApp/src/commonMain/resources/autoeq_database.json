@@ -1,0 +1,8 @@
+[
+    {"name": "WH-1000XM4", "brand": "Sony", "type": "Over-ear", "gains": [2, 1, 0, -1, -2, -1, 1, 2, 3, 2]},
+    {"name": "HD 600", "brand": "Sennheiser", "type": "Open-back", "gains": [0, 0, 1, 2, 1, 0, -1, -1, 0, 1]},
+    {"name": "AirPods Pro 2", "brand": "Apple", "type": "In-ear", "gains": [3, 2, 1, 0, 0, 1, 2, 1, 0, -1]},
+    {"name": "DT 990 Pro", "brand": "Beyerdynamic", "type": "Over-ear", "gains": [-1, -2, -1, 0, 1, 2, 4, 3, 2, 1]},
+    {"name": "QC45", "brand": "Bose", "type": "Over-ear", "gains": [4, 3, 2, 1, 0, 0, -1, -2, -1, 0]},
+    {"name": "Galaxy Buds2 Pro", "brand": "Samsung", "type": "In-ear", "gains": [2, 1, 0, 1, 2, 1, 0, -1, -2, -1]}
+]

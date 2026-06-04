@@ -64,6 +64,7 @@ private fun AudioPiPContent(viewModel: AppViewModel, item: pEQMediaItem) {
     Row(modifier = Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         pEQImage(
             data = item.thumbnail,
+            fallbackPath = item.path,
             modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)),
             mediaType = item.type
         )

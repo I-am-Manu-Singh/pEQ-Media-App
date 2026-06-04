@@ -90,50 +90,39 @@ fun AppViewModel.startHardwarePolling() {
                         rtaData.value = rawSpectrum
                     }
                     
-                    // 🧠 NEURAL BPM & KEY ANALYSIS
-                    val energy = rawSpectrum.take(4).average().toFloat() 
-                    if (energy > 0.4f) {
-                        val currentMs = Clock.System.now().toEpochMilliseconds()
-                        val diff = currentMs - lastBeatMs
-                        if (diff > 300 && diff < 1200) { 
-                            val instantBpm = 60000f / diff
-                            detectedBpm.floatValue = (detectedBpm.floatValue * 0.9f + instantBpm * 0.1f)
-                            lastBeatMs = currentMs
-                        }
-                    }
+                    // 🧠 NEURAL PITCH & HARMONIC ANALYSIS
+                    val peakIdx = rawSpectrum.indices.maxByOrNull { rawSpectrum[it] } ?: 0
+                    val freq = peakIdx * (audioEngine.getSampleRate() / (rawSpectrum.size * 2f))
                     
-                    if (Clock.System.now().toEpochMilliseconds() % 3500 < 100) { 
-                        val chords = listOf("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B", 
-                                            "Cm", "C#m", "Dm", "Ebm", "Em", "Fm", "F#m", "Gm", "Abm", "Am", "Bbm", "Bm",
-                                            "C7", "G7", "D7", "A7", "E7", "Fmaj7", "Cmaj7")
-                        val peakIdx = rawSpectrum.indices.maxByOrNull { rawSpectrum[it] } ?: 0
-                        val harmonicCenter = (peakIdx * 1.5).toInt() % chords.size
-                        withContext(Dispatchers.Main) {
-                            detectedChord.value = chords[harmonicCenter]
-                            currentKey.value = if (detectedChord.value.contains("m") && !detectedChord.value.contains("maj")) "${detectedChord.value.replace("m","")} Minor" else "${detectedChord.value.replace("7","")} Major"
+                    withContext(Dispatchers.Main) {
+                        detectedPitch.value = freq
+                        // Rough estimate for chord detection based on fundamental
+                        val notes = listOf("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
+                        val noteIdx = (12 * log2(freq / 440.0) + 69).toInt() % 12
+                        if (noteIdx in 0..11) {
+                            detectedChord.value = notes[noteIdx]
+                            currentKey.value = "${notes[noteIdx]} Harmonic"
                         }
                     }
                 } else {
-                    val time = Clock.System.now().toEpochMilliseconds() / 180.0
                     withContext(Dispatchers.Main) {
-                        rtaData.value = FloatArray(32) { i -> 
-                            (0.04f + 0.08f * sin(time + i * 0.5).toFloat()).coerceAtLeast(0f) 
-                        }
+                        rtaData.value = FloatArray(32) { 0f }
+                        detectedPitch.floatValue = 0f
+                        detectedChord.value = null
                     }
                 }
                 
                 withContext(Dispatchers.Main) {
-                    currentSampleRate.value = if (engineState.sampleRate > 0) engineState.sampleRate else 44100
-                    currentBitDepth.value = if (engineState.bitDepth > 0) engineState.bitDepth else 16
-                    currentCodec.value = engineState.codec.ifBlank { "PCM" }
-                    currentBitrate.value = engineState.bitrate.coerceAtLeast(1411)
+                    currentSampleRate.value = audioEngine.getSampleRate()
+                    currentBitDepth.value = audioEngine.getBitDepth()
+                    currentCodec.value = audioEngine.getCodec()
+                    currentBitrate.value = audioEngine.getBitrate()
                     
                     val maxMag = rtaData.value.maxOrNull() ?: 0f
                     val targetPeak = if (maxMag > 0.01f) 20 * log10(maxMag.coerceAtLeast(0.00001f)) else -60f
-                    peakLevelDb.value = (peakLevelDb.value * 0.8f + targetPeak * 0.2f).coerceIn(-60f, 0f)
+                    peakLevelDb.value = targetPeak.coerceIn(-60f, 0f)
 
-                    val baseLoad = if (isBitPerfectEnabled.value) 12 else 8
-                    dspProcessingLoad.value = (baseLoad + (0..5).random()).toFloat()
+                    dspProcessingLoad.value = audioEngine.getDspLoad()
                 }
 
             } else {
@@ -197,13 +186,26 @@ fun AppViewModel.confirmDeviceSwitch() {
 fun AppViewModel.runHardwareDiagnostics() {
     scope.launch {
         isDiagnosticRunning.value = true
-        diagnosticLog.add("Initializing JNI Hook...")
-        delay(500)
-        diagnosticLog.add("Testing Audio Engine Latency...")
-        delay(1000)
-        diagnosticLog.add("Verifying DSP Buffer...")
-        delay(800)
-        diagnosticLog.add("All systems nominal.")
+        diagnosticLog.clear()
+        
+        diagnosticLog.add("Probing JNI Signal Path...")
+        delay(200)
+        val isJniActive = audioEngine.isInitialized()
+        diagnosticLog.add("JNI Engine: ${if (isJniActive) "STABLE" else "ERR_INIT"}")
+        
+        diagnosticLog.add("Calculating RTL Latency...")
+        delay(400)
+        val latency = audioEngine.getLatency()
+        diagnosticLog.add("Measured Round-Trip: ${latency}ms")
+        
+        diagnosticLog.add("Verifying DSP Buffer Stability...")
+        val load = audioEngine.getDspLoad()
+        diagnosticLog.add("Current DSP Load: ${load}%")
+        
+        if (load > 80f) diagnosticLog.add("WARN: Neural Overflow Risk Detected")
+        else diagnosticLog.add("Buffer Status: OPTIMAL")
+        
+        diagnosticLog.add("Diagnostic Cycle Complete.")
         isDiagnosticRunning.value = false
     }
 }
@@ -218,3 +220,8 @@ fun AppViewModel.togglePhaseInversion(active: Boolean) {
     audioEngine.setPhaseInversion(active)
 }
 
+fun AppViewModel.toggleMicMonitoring() {
+    isMicMonitoringEnabled.value = !isMicMonitoringEnabled.value
+    audioEngine.enableZeroLatencyMonitoring(isMicMonitoringEnabled.value)
+    showToast("Mic Monitoring: ${if (isMicMonitoringEnabled.value) "ENABLED" else "DISABLED"}")
+}

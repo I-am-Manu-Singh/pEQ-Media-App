@@ -17,7 +17,7 @@ import org.audiocular.peq.app.network.createHttpClient
 class SubtitleRepository(
     private val apiKeyProvider: () -> String
 ) {
-    private val apiKey get() = apiKeyProvider()
+    private val apiKey get() = apiKeyProvider().ifBlank { org.audiocular.peq.app.data.pEQConstants.OPEN_SUBTITLES_INTERNAL_KEY }
     private val client = createHttpClient().config {
         install(HttpTimeout) {
             requestTimeoutMillis = 10_000
@@ -37,8 +37,7 @@ private val activeRequests =
         artist: String? = null,
         season: Int? = null,
         episode: Int? = null,
-        language: String = "en",
-        durationMs: Long = 0
+        language: String = "en"
     ): List<SubtitleMatch> {
         if (apiKey.isBlank()) {
             println("pEQControl: [SUBTITLES] No API Key provided")
