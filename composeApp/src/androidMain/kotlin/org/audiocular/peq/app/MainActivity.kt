@@ -30,7 +30,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.audiocular.peq.app.ai.AndroidpEQCloudDownloader
-import org.audiocular.peq.app.ai.AndroidpEQStemSplitter
 import org.audiocular.peq.app.audio.AndroidAudioEngine
 import org.audiocular.peq.app.audio.AudioEngineProvider
 import org.audiocular.peq.app.data.*
@@ -46,23 +45,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collect
 class MainActivity : ComponentActivity() {
-    private fun restoreFactorySamples() {
-        val samplesDir = java.io.File("/storage/emulated/0/pEQ/Samples")
-        if (!samplesDir.exists()) samplesDir.mkdirs()
-        val drumTypes = listOf("KICK", "SNARE", "HIHAT", "TOM-H", "CRASH", "RIDE", "COWBELL", "SHAKER")
-        drumTypes.forEach { type ->
-            val sampleFile = java.io.File(samplesDir, "${type.lowercase()}.wav")
-            if (!sampleFile.exists()) {
-                try {
-                    assets.open("samples/${type.lowercase()}.wav").use { input ->
-                        sampleFile.outputStream().use { output -> input.copyTo(output) }
-                    }
-                } catch (e: Exception) {
-                    println("pEQControl: [SAMPLES] Failed to restore $type: ${e.message}")
-                }
-            }
-        }
-    }
+
     private fun getCacheFileForUri(uri: android.net.Uri): java.io.File? {
         try {
             var displayName: String? = null
@@ -138,19 +121,7 @@ class MainActivity : ComponentActivity() {
         initPermissionManager(this)
         initPersistenceManager(applicationContext)
 
-        // Preload standard physical drum samples for learning drum pads
-        listOf("Kick", "Snare", "Hihat", "Clap", "Crash", "Ride", "Tom", "Perc").forEach { type ->
-            val sampleFile = java.io.File(filesDir, "samples/${type.lowercase()}.wav")
-            if (!sampleFile.exists()) {
-                try {
-                    assets.open("samples/${type.lowercase()}.wav").use { input ->
-                        sampleFile.outputStream().use { output -> input.copyTo(output) }
-                    }
-                } catch (e: Exception) {
-                    println("pEQControl: [SAMPLES] Failed to restore $type: ${e.message}")
-                }
-            }
-        }
+
         org.audiocular.peq.app.ui.components.initSystemWindowManager(this)
         
         val permissions = getPermissionManager()
@@ -166,7 +137,6 @@ class MainActivity : ComponentActivity() {
         viewModel = AppViewModel(
             audioEngine = audioEngine,
             persistenceManager = getPersistenceManager(),
-            stemSplitter = AndroidpEQStemSplitter(this),
             cloudDownloader = AndroidpEQCloudDownloader(this)
         ).apply {
             pEQViewModelProvider.viewModel = this
@@ -208,7 +178,7 @@ class MainActivity : ComponentActivity() {
         viewModel.onPickFolderRequested = {
             folderPickerLauncher.launch(null)
         }
-        viewModel.onRestoreSamplesRequested = { restoreFactorySamples() }
+
 
         val lyricsPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
@@ -319,7 +289,7 @@ class MainActivity : ComponentActivity() {
                     sizeBytes = sizeBytes,
                     durationMs = 0L
                 )
-                viewModel.enqueueSplitJob(item)
+                viewModel.playMediaItem(item)
             }
         }
         viewModel.onPickTrackRequested = {

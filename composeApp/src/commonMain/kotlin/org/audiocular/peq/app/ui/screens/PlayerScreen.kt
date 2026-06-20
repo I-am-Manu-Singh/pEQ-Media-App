@@ -69,7 +69,6 @@ fun PlayerScreen(
                     viewModel.isPlaylistPickerShown.value ||
                     viewModel.showTrackInfoSheet.value ||
                     viewModel.showSleepTimerSheet.value ||
-                    viewModel.showStemSplitter.value ||
                     viewModel.isEditingLyrics.value ||
                     viewModel.isEditingChapters.value ||
                     viewModel.isEditingSubtitles.value ||
@@ -98,7 +97,6 @@ fun PlayerScreen(
             viewModel.isPlaylistPickerShown.value -> viewModel.isPlaylistPickerShown.value = false
             viewModel.showTrackInfoSheet.value -> viewModel.showTrackInfoSheet.value = false
             viewModel.showSleepTimerSheet.value -> viewModel.showSleepTimerSheet.value = false
-            viewModel.showStemSplitter.value -> viewModel.showStemSplitter.value = false
             viewModel.isVideoFullScreen.value -> {
                 viewModel.isVideoFullScreen.value = false
                 setSystemBarsVisibility(true)
@@ -158,10 +156,6 @@ fun PlayerScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).zIndex(40f)
         ) {
             SleepTimerFloater(viewModel = viewModel, onDismiss = { viewModel.showSleepTimerSheet.value = false })
-        }
-
-        AnimatedVisibility(visible = viewModel.showStemSplitter.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(50f)) {
-            StemSplitterDialog { viewModel.showStemSplitter.value = false }
         }
 
         AnimatedVisibility(visible = viewModel.isChaptersVisible.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(60f)) {
@@ -616,31 +610,7 @@ fun TrackInfoBottomSheet(
 
                 Spacer(Modifier.height(18.dp))
 
-                // =========================
-                // NEURAL & AUDIO CHARACTERISTICS
-                // =========================
-                if (item.bpm != null || !item.key.isNullOrBlank()) {
-                    EnhancedInfoSection(
-                        title = "NEURAL CHARACTERISTICS",
-                        icon = Icons.Default.Bolt
-                    ) {
-                        item.bpm?.let {
-                            EnhancedInfoRow(
-                                icon = Icons.Default.Speed,
-                                label = "Neural BPM",
-                                value = "${it.toInt()} BPM"
-                            )
-                        }
-                        item.key?.takeIf { it.isNotBlank() }?.let {
-                            EnhancedInfoRow(
-                                icon = Icons.Default.Key,
-                                label = "Musical Key",
-                                value = it
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(18.dp))
-                }
+
 
                 // =========================
                 // TECHNICAL

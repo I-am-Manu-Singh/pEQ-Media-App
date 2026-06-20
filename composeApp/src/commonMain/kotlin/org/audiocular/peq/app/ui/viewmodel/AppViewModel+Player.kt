@@ -136,7 +136,6 @@ fun AppViewModel.seekRelative(deltaMs: Long) {
 }
 
 fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true, fromHomeScreen: Boolean = false) {
-    showStemSplitter.value = false 
     currentMediaItem.value = item
     syncedLyrics.clear()
     
@@ -211,28 +210,6 @@ fun AppViewModel.playMediaItemFromQueue(index: Int) {
         playMediaItem(item, addToQueue = false)
         syncNowPlaying()
     }
-}
-
-// Mixer Extensions
-fun AppViewModel.updateStemVolume(stem: String, volume: Float) {
-    stemVolumes[stem] = volume
-    audioEngine.updateStemVolume(stem, volume)
-}
-
-fun AppViewModel.toggleStemMute(stem: String) {
-    val current = stemMutes[stem] ?: false
-    stemMutes[stem] = !current
-}
-
-fun AppViewModel.toggleStemSolo(stem: String, active: Boolean? = null) {
-    val current = stemSolos[stem] ?: false
-    val newState = active ?: !current
-    stemSolos[stem] = newState
-}
-
-fun AppViewModel.updateStemPan(stem: String, pan: Float) {
-    stemPans[stem] = pan
-    audioEngine.updateStemPan(stem, pan)
 }
 
 // Track Management
@@ -360,7 +337,6 @@ fun AppViewModel.onTrackLoaded() {
         }
         delay(1500)
         refreshAvailableTracks()
-        analyzeCurrentTrack() // 🧠 Auto-sync workstation telemetry
         persistSession()
         syncNowPlaying()
     }

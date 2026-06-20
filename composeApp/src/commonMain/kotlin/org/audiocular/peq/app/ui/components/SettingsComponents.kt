@@ -21,6 +21,7 @@ import org.audiocular.peq.app.ui.components.pEQGlassCard
 import org.audiocular.peq.app.ui.theme.pEQTheme
 import org.audiocular.peq.app.ui.theme.pEQAccent
 import androidx.compose.ui.graphics.vector.ImageVector
+import org.audiocular.peq.app.Tab
 
 /**
  * Premium Settings components for the pEQ Workstation.
@@ -31,8 +32,7 @@ fun SettingsPanel(viewModel: AppViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .statusBarsPadding()
+            .background(Color.Transparent)
             .padding(24.dp)
     ) {
         // Header
@@ -56,7 +56,7 @@ fun SettingsPanel(viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 )
             }
-            IconButton(onClick = { viewModel.showSettings.value = false }, modifier = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)) {
+            IconButton(onClick = { viewModel.currentTab.value = Tab.Dashboard }, modifier = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)) {
                 Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
             }
         }
@@ -66,25 +66,75 @@ fun SettingsPanel(viewModel: AppViewModel) {
             modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Theme Section
-            SettingsSection("AESTHETICS & THEME", icon = Icons.Default.Palette) {
-                ThemeSelectionRow(viewModel)
-                Spacer(Modifier.height(16.dp))
-                AccentSelectionRow(viewModel)
+            // Profile Section
+            ProfileSection(viewModel)
+
+            // Telemetry Section
+            SettingsSection("SYSTEM TELEMETRY", icon = Icons.Default.Analytics) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard("CPU LOAD", "${(viewModel.dspProcessingLoad.value * 100).toInt()}%", Icons.Default.Memory, Modifier.weight(1f))
+                    StatCard("SIGNAL", "${viewModel.preDspLevel.value.toInt()}dB", Icons.Default.GraphicEq, Modifier.weight(1f))
+                }
+                
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                ) {
+                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Dns, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("ACTIVE NEURAL OUTPUT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            Text(viewModel.selectedOutputDevice.value.name, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
             }
 
-            // Engine Section
-            SettingsSection("AUDIO ENGINE", icon = Icons.Default.SettingsInputComponent) {
-                TogglePreference("Neural Gapless Playback", "Enable smooth transitions between workstation tracks", viewModel.isGaplessEnabled.value) { viewModel.isGaplessEnabled.value = it }
-                TogglePreference("Hardware Bit-Perfect Mode", "Bypass system mixer for high-resolution DAC output", viewModel.isBitPerfectEnabled.value) { viewModel.isBitPerfectEnabled.value = it }
+            // Theme & Aesthetics Section
+            SettingsSection("AESTHETICS & THEME", icon = Icons.Default.Palette) {
+                ThemeSelectionRow(viewModel)
+                Spacer(Modifier.height(8.dp))
+                AccentSelectionRow(viewModel)
+                Spacer(Modifier.height(8.dp))
                 TogglePreference("Haptic Feedback Orchestration", "Synchronize tactile response with neural transients", viewModel.isHapticsEnabled.value) { viewModel.isHapticsEnabled.value = it }
+                if (viewModel.isHapticsEnabled.value) {
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("VIBRATION INTENSITY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("${(viewModel.hapticIntensity.value * 100).toInt()}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Slider(
+                            value = viewModel.hapticIntensity.value,
+                            onValueChange = { viewModel.hapticIntensity.value = it },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                TogglePreference("Dynamic Colors", "Generate palette from workstation assets", viewModel.isDynamicColorsEnabled.value) { viewModel.isDynamicColorsEnabled.value = it }
+            }
+
+            // Audio Engine Section
+            SettingsSection("AUDIO ENGINE", icon = Icons.Default.SettingsInputComponent) {
+                TogglePreference("Neural Gapless Playback", "Enable smooth transitions between workstation tracks", viewModel.isGaplessEnabled.value) { viewModel.toggleGapless(it) }
+                TogglePreference("Neural Saturation", "Industrial gain boost & harmonics", viewModel.isNeuralSaturationEnabled.value) { viewModel.toggleNeuralSaturation(it) }
+                TogglePreference("Hardware Bit-Perfect Mode", "Bypass system mixer for high-resolution DAC output", viewModel.isBitPerfectEnabled.value) { viewModel.isBitPerfectEnabled.value = it }
+                TogglePreference("Buffer Priority", "Ultra-low latency for pro hardware (High/Low)", viewModel.bufferPriority.value == "High") { viewModel.bufferPriority.value = if (it) "High" else "Low" }
                 
                 Spacer(Modifier.height(8.dp))
                 ActionPreference("Reset Neural Parameters", "Restore EQ and Master gains to flat state", Icons.Default.RestartAlt) {
                     viewModel.resetAudioEngine()
                 }
             }
-            
+
+            // Utilities Section
+            SettingsSection("WORKSTATION TOOLS", icon = Icons.Default.Timer) {
+                TogglePreference("Sleep Timer", if (viewModel.sleepTimerActive.value) "${viewModel.sleepTimerRemainingSec.longValue / 60}m remaining" else "Automated system shutdown", viewModel.sleepTimerActive.value) { viewModel.toggleSleepTimer(it) }
+                TogglePreference("Station Lock", "Disable touch gestures in playback", viewModel.isKidsLockActive.value) { viewModel.isKidsLockActive.value = it }
+            }
+
             // Services Section
             SettingsSection("API SERVICES", icon = Icons.Default.Cloud) {
                 InputPreference(
@@ -102,12 +152,12 @@ fun SettingsPanel(viewModel: AppViewModel) {
                 Spacer(Modifier.height(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        ActionPreference("Refresh Index", "Scan all folders for new media", Icons.Default.Refresh) {
+                        ActionPreference("Refresh Index", "Scan folders", Icons.Default.Refresh) {
                             viewModel.refreshLibrary()
                         }
                     }
                     Box(modifier = Modifier.weight(1f)) {
-                        ActionPreference("Clear Archive", "Purge all indexed metadata", Icons.Default.DeleteSweep) {
+                        ActionPreference("Clear Archive", "Purge database", Icons.Default.DeleteSweep) {
                             viewModel.clearLibrary()
                         }
                     }
@@ -117,6 +167,27 @@ fun SettingsPanel(viewModel: AppViewModel) {
                 ActionPreference("Purge Workstation Cache", "Delete temporary thumbnails and lyrics", Icons.Default.Cached) {
                     viewModel.clearCache()
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileSection(viewModel: AppViewModel) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(48.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("NEURAL IDENTITY", fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                Text("Workstation Admin", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -130,11 +130,10 @@ fun NeuralAudioWorkstation(
                             Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
                                 val showLyrics by viewModel.isLyricsVisible
                                 AnimatedContent(
-                                    targetState = if (viewModel.isHarmonyVisible.value) "harmony" else if (showLyrics) "lyrics" else "vinyl",
+                                    targetState = if (showLyrics) "lyrics" else "vinyl",
                                     label = "playback_switch"
                                 ) { mode ->
                                     when(mode) {
-                                        "harmony" -> ChordVisualizerScreen(viewModel)
                                         "lyrics" -> LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize())
                                         else -> AudioVinylEngine(item = currentItem, isPlaying = isPlaying)
                                     }
@@ -185,16 +184,14 @@ fun NeuralAudioWorkstation(
                     Column(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(modifier = Modifier.fillMaxWidth().weight(0.92f), contentAlignment = Alignment.Center) {
                             val showLyrics by viewModel.isLyricsVisible
-                            val showHarmony by viewModel.isHarmonyVisible
                             AnimatedContent(
-                                targetState = if (showHarmony) "harmony" else if (showLyrics) "lyrics" else "vinyl",
+                                targetState = if (showLyrics) "lyrics" else "vinyl",
                                 transitionSpec = {
                                     fadeIn(animationSpec = tween(260)) togetherWith fadeOut(animationSpec = tween(180))
                                 },
                                 label = "portrait_switch"
                             ) { mode ->
                                 when (mode) {
-                                    "harmony" -> ChordVisualizerScreen(viewModel)
                                     "lyrics" -> LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize().padding(12.dp))
                                     else -> {
                                         Box(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
@@ -821,7 +818,6 @@ fun NeuralHeaderPlayerControls(viewModel: AppViewModel) {
         }
         PlayerActionButton(icon = Icons.Default.Timer, active = viewModel.sleepTimerActive.value) { viewModel.showSleepTimerSheet.value = true }
         PlayerActionButton(icon = Icons.Default.ContentCut, active = viewModel.showCutter.value) { viewModel.showCutter.value = !viewModel.showCutter.value }
-        PlayerActionButton(icon = if (viewModel.isHarmonyVisible.value) Icons.Default.MusicNote else Icons.Default.Audiotrack, active = viewModel.isHarmonyVisible.value) { viewModel.isHarmonyVisible.value = !viewModel.isHarmonyVisible.value }
         PlayerActionButton(icon = if (viewModel.isMicMonitoringEnabled.value) Icons.Default.MicExternalOn else Icons.Default.MicExternalOff, active = viewModel.isMicMonitoringEnabled.value) { viewModel.toggleMicMonitoring() }
         
     }

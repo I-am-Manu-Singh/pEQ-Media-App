@@ -22,7 +22,7 @@ import org.audiocular.peq.app.ui.viewmodel.AppViewModel
 @Composable
 fun pEQWorkstationDashboard(viewModel: AppViewModel = LocalAppViewModel.current) {
     val selectedTab by viewModel.dashboardSubTab
-    val tabs = listOf("HOME", "LIBRARY", "PLAYLISTS", "QUEUES", "DOWNLOADS", "APP SETTINGS")
+    val tabs = listOf("HOME", "LIBRARY", "PLAYLISTS", "QUEUES", "DOWNLOADS")
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Integrated Workstation Tab Navigation
@@ -77,7 +77,6 @@ fun pEQWorkstationDashboard(viewModel: AppViewModel = LocalAppViewModel.current)
                 2 -> PlaylistManagerTab(viewModel)
                 3 -> QueueTab(viewModel)
                 4 -> DownloadsScreen(viewModel)
-                5 -> SystemStatusTab(viewModel)
             }
         }
 

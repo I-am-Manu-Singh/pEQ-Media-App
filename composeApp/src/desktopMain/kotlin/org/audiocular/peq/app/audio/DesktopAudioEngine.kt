@@ -47,8 +47,6 @@ class DesktopAudioEngine : AudioEngine {
     }
 
     // High-performance video state
-    private val drumClips = mutableMapOf<String, Clip>()
-    private val chordList = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     val videoBitmap = mutableStateOf<Bitmap?>(null)
     val videoFrameCounter = mutableStateOf(0L)
     private var width = 0
@@ -80,10 +78,8 @@ class DesktopAudioEngine : AudioEngine {
     private var currentUrl: String? = null
     private var volume: Float = 1f
     private val isPlayingState = mutableStateOf(false)
-    private val stemPlayers = mutableMapOf<String, MediaPlayer>()
     
     private var bassHandle = 0
-    private val stemHandles = mutableMapOf<String, Int>()
 
     init {
         setupBass()
@@ -281,18 +277,6 @@ class DesktopAudioEngine : AudioEngine {
             } else {
                 for (i in 0 until 32) latestSpectrumData[i] *= 0.8f
             }
-            // Algorithmic pitch detection for Learn screen
-            val peakBin = latestSpectrumData.indices.maxByOrNull { latestSpectrumData[it] } ?: 0
-            if (latestSpectrumData[peakBin] > 0.1f) {
-                val freq = (peakBin * 1378f) // Simplified frequency estimation
-                val noteIdx = (12 * (ln(freq.coerceAtLeast(1f).toDouble() / 440.0) / ln(2.0) + 4.0).toInt()) % 12
-                val note = chordList[noteIdx.toInt().coerceIn(0, 11)]
-                
-                uiScope.launch(Dispatchers.Main) {
-                    // Update engine-side state for anyone observing
-                    // In a real app, we'd send this back to AppViewModel
-                }
-            }
 
             // CRITICAL: Propagate a copy to ensure Compose detects change
             onFftDataReceived?.invoke(latestSpectrumData.copyOf())
@@ -354,38 +338,6 @@ class DesktopAudioEngine : AudioEngine {
         currentUrl = url
     }
 
-    override fun loadStems(stems: Map<String, String>) {
-        if (Bass.isLoaded && Bass.lib != null) {
-            try {
-                stemHandles.values.forEach { Bass.lib?.BASS_ChannelStop(it) }
-                stemHandles.clear()
-                stems.forEach { (name, url) ->
-                    val path = if (url.startsWith("file://")) url.substring(7) else url
-                    val handle = Bass.lib?.BASS_StreamCreateFile(false, path, 0L, 0L, 0) ?: 0
-                    if (handle != 0) {
-                        stemHandles[name.lowercase()] = handle
-                        Bass.lib?.BASS_ChannelPlay(handle, true)
-                    }
-                }
-                isPlayingState.value = true
-                println("pEQControl: [BASS] Loaded stems: ${stems.keys}")
-                return
-            } catch (e: Exception) {
-                println("pEQControl: [BASS] Failed to load stems: ${e.message}")
-            }
-        }
-        // Clear existing stem players
-        stemPlayers.values.forEach { it.release() }
-        stemPlayers.clear()
-
-        stems.forEach { (name, path) ->
-            val player = factory.mediaPlayers().newEmbeddedMediaPlayer()
-            player.media().prepare(path)
-            stemPlayers[name] = player
-        }
-        println("pEQControl: [STEMS] Neural multi-track session initialized with ${stems.size} stems")
-    }
-
     override fun setVideoSurface(surface: Any?) = Unit
 
     override fun setVideoScalingMode(mode: Int) = Unit
@@ -401,7 +353,6 @@ class DesktopAudioEngine : AudioEngine {
             return
         }
         mediaPlayer.controls().play()
-        stemPlayers.values.forEach { it.controls().play() }
         isPlayingState.value = true
     }
 
@@ -412,7 +363,6 @@ class DesktopAudioEngine : AudioEngine {
             return
         }
         mediaPlayer.controls().pause()
-        stemPlayers.values.forEach { it.controls().pause() }
         isPlayingState.value = false
     }
 
@@ -423,7 +373,6 @@ class DesktopAudioEngine : AudioEngine {
             return
         }
         mediaPlayer.controls().stop()
-        stemPlayers.values.forEach { it.controls().stop() }
         isPlayingState.value = false
     }
 
@@ -553,26 +502,6 @@ class DesktopAudioEngine : AudioEngine {
     }
 
     override fun updateEqQ(bandIndex: Int, q: Float) = Unit
-    override fun updateStemVolume(stem: String, volume: Float) {
-        if (Bass.isLoaded) {
-            val handle = stemHandles[stem.lowercase()]
-            if (handle != null && handle != 0) {
-                Bass.lib?.BASS_ChannelSetAttribute(handle, 2, volume) // 2 = BASS_ATTRIB_VOL
-                return
-            }
-        }
-        stemPlayers[stem.lowercase()]?.audio()?.setVolume((volume * 100).toInt())
-    }
-    
-    override fun updateStemPan(stem: String, pan: Float) {
-        if (Bass.isLoaded) {
-            val handle = stemHandles[stem.lowercase()]
-            if (handle != null && handle != 0) {
-                Bass.lib?.BASS_ChannelSetAttribute(handle, 3, pan) // 3 = BASS_ATTRIB_PAN
-                return
-            }
-        }
-    }
     override fun setCompressorThreshold(thresholdDb: Float) = Unit
     override fun updateCompressor(threshold: Float, ratio: Float, attack: Float, release: Float) = Unit
     override fun setLimiterEnabled(enabled: Boolean) = Unit
@@ -688,80 +617,7 @@ class DesktopAudioEngine : AudioEngine {
             }
         }
     }
-    override fun playDrumSample(label: String, index: Int) {
-        executor.execute {
-            try {
-                val cleanLabel = label.uppercase()
-                val fileName = when {
-                    cleanLabel.startsWith("808-") -> {
-                        when {
-                            cleanLabel.contains("KICK") -> "kick-808.wav"
-                            cleanLabel.contains("SNARE") -> "snare-808.wav"
-                            cleanLabel.contains("HAT") -> "hihat-808.wav"
-                            cleanLabel.contains("CLAP") -> "clap-808.wav"
-                            cleanLabel.contains("CRASH") -> "crash-808.wav"
-                            cleanLabel.contains("TOM") -> "tom-808.wav"
-                            cleanLabel.contains("RIM") -> "snare-block.wav"
-                            cleanLabel.contains("COW") -> "cowbell-808.wav"
-                            else -> "perc-808.wav"
-                        }
-                    }
-                    cleanLabel.startsWith("GRIME-") -> {
-                        when {
-                            cleanLabel.contains("KICK") -> "kick-heavy.wav"
-                            cleanLabel.contains("SNARE") -> "snare-dist01.wav"
-                            cleanLabel.contains("HAT") -> "hihat-dist01.wav"
-                            cleanLabel.contains("CLAP") -> "clap-crushed.wav"
-                            cleanLabel.contains("METAL") -> "perc-metal.wav"
-                            cleanLabel.contains("HAMMER") -> "perc-nasty.wav"
-                            cleanLabel.contains("ENGINE") -> "perc-weirdo.wav"
-                            else -> "perc-nasty.wav"
-                        }
-                    }
-                    cleanLabel.startsWith("LOFI-") -> {
-                        when {
-                            cleanLabel.contains("KICK") -> "kick-softy.wav"
-                            cleanLabel.contains("SNARE") -> "snare-lofi01.wav"
-                            cleanLabel.contains("HAT") -> "hihat-plain.wav"
-                            cleanLabel.contains("CLAP") -> "clap-tape.wav"
-                            cleanLabel.contains("VINYL") -> "kick-vinyl01.wav"
-                            cleanLabel.contains("DUST") -> "shaker-analog.wav"
-                            else -> "perc-hollow.wav"
-                        }
-                    }
-                    cleanLabel.startsWith("ANALOG") || cleanLabel.contains("JUNO") -> {
-                        when {
-                            cleanLabel.contains("KICK") -> "kick-classic.wav"
-                            cleanLabel.contains("SNARE") -> "snare-analog.wav"
-                            cleanLabel.contains("HAT") -> "hihat-electro.wav"
-                            cleanLabel.contains("CLAP") -> "clap-analog.wav"
-                            cleanLabel.contains("TOM") -> "tom-analog.wav"
-                            else -> "perc-chirpy.wav"
-                        }
-                    }
-                    else -> {
-                         when {
-                            cleanLabel.contains("KICK") -> "kick-acoustic01.wav"
-                            cleanLabel.contains("SNARE") -> "snare-acoustic01.wav"
-                            cleanLabel.contains("HAT") -> "hihat-acoustic01.wav"
-                            else -> "perc-chirpy.wav"
-                        }
-                    }
-                }
-                
-                val clip = drumClips.getOrPut(fileName) {
-                    val stream = AudioSystem.getAudioInputStream(File(System.getProperty("user.dir") + "/composeApp/src/desktopMain/resources/fingerdrumming/$fileName"))
-                    val c = AudioSystem.getClip()
-                    c.open(stream)
-                    c
-                }
-                clip.setFramePosition(0)
-                clip.start()
-            } catch (e: Exception) {
-                println("pEQControl: [DRUMS] Trigger Error -> ${e.message} for label $label")
-            }
-        }
-    }
+
     override fun addExternalSubtitle(path: String) {
         mediaPlayer.subpictures().setSubTitleFile(path)
         subtitlesEnabled = true

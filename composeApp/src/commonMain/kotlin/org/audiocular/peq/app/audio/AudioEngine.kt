@@ -9,7 +9,6 @@ interface AudioEngine {
     fun playTrack(url: String, title: String? = null, artist: String? = null, thumbnail: String? = null)
     fun setNeuralSaturation(enabled: Boolean)
     fun loadTrack(url: String, title: String? = null, artist: String? = null, thumbnail: String? = null)
-    fun loadStems(stems: Map<String, String>)
     fun setVideoSurface(surface: Any?)
     fun setVideoScalingMode(mode: Int)
     fun setAudioDelay(ms: Long)
@@ -33,8 +32,6 @@ interface AudioEngine {
     fun switchTrack(track: org.audiocular.peq.app.data.MediaTrack?)
     fun updateEqBand(bandIndex: Int, gainDb: Float)
     fun updateEqQ(bandIndex: Int, q: Float)
-    fun updateStemVolume(stem: String, volume: Float)
-    fun updateStemPan(stem: String, pan: Float)
     fun setCompressorThreshold(thresholdDb: Float)
     fun updateCompressor(threshold: Float, ratio: Float, attack: Float, release: Float)
     fun setLimiterEnabled(enabled: Boolean)
@@ -85,23 +82,16 @@ interface AudioEngine {
     suspend fun saveEmbeddedChapters(url: String, chapters: List<org.audiocular.peq.app.data.MediaChapter>)
     suspend fun saveEmbeddedSubtitles(url: String, subtitles: List<org.audiocular.peq.app.data.SyncedLine>)
     suspend fun saveSidecarFile(mediaPath: String, extension: String, content: String)
-    fun playDrumSample(label: String, index: Int = -1)
-    fun getLoadedSampleLabels(): List<String> = emptyList()
 
     fun addExternalSubtitle(path: String)
     fun getConnectedDevices(): List<org.audiocular.peq.app.data.Device> = emptyList()
     fun setSubtitlesEnabled(enabled: Boolean)
 
-    // 🎓 Learning & Calibration Engine
-    fun startTuner() {}
-    fun stopTuner() {}
-    fun setMetronomeEnabled(enabled: Boolean) {}
-    fun setBpm(bpm: Float) {}
-fun togglePlayback() {}
+    fun togglePlayback() {}
 
-fun nextTrack() {}
+    fun nextTrack() {}
 
-fun previousTrack() {}
+    fun previousTrack() {}
 
     fun getDspLoad(): Float = 0f
     fun isInitialized(): Boolean = true

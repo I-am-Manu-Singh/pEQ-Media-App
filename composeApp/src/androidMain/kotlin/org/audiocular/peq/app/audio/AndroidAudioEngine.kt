@@ -23,7 +23,6 @@ import org.audiocular.peq.app.data.TrackType
 import org.audiocular.peq.app.data.SyncedLine
 import org.audiocular.peq.app.data.MediaChapter
 import android.media.MediaMetadataRetriever
-import org.audiocular.peq.app.data.BeatEvent
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -129,7 +128,6 @@ class AndroidAudioEngine(
 ) : AudioEngine {
 
     private var bassHandle = 0
-    private val stemHandles = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private var currentTrackUrl: String? = null
 
     private var listenersAttached = false
@@ -138,7 +136,6 @@ class AndroidAudioEngine(
 
     private val json = Json { ignoreUnknownKeys = true }
     private var player: ExoPlayer? = null
-    private val stemPlayers = java.util.concurrent.ConcurrentHashMap<String, ExoPlayer>()
     private var dynamicsProcessing: DynamicsProcessing? = null
 
     private var visualizer: android.media.audiofx.Visualizer? = null
@@ -188,11 +185,6 @@ class AndroidAudioEngine(
             Context.MODE_PRIVATE
         )
 
-    private val soundPool = android.media.SoundPool.Builder().setMaxStreams(32).build()
-    private val kitSounds = mutableMapOf<String, MutableMap<String, Int>>()
-    private var currentDrumKitName = "NEURAL"
-
-
 
     private val loopRunnable =
         object : Runnable {
@@ -237,7 +229,6 @@ class AndroidAudioEngine(
 
         
         initVisualizer()
-        preloadDrumSamples()
     }
     @OptIn(UnstableApi::class)
     private fun attachPlayerListeners() {
@@ -934,11 +925,6 @@ class AndroidAudioEngine(
 
         try {
             player?.volume = 1f
-            stemPlayers.values.forEach {
-                it.stop()
-                it.release()
-            }
-            stemPlayers.clear()
 
             val uri =
                 if (
@@ -1057,11 +1043,6 @@ class AndroidAudioEngine(
 
         try {
             player?.volume = 1f
-            stemPlayers.values.forEach {
-                it.stop()
-                it.release()
-            }
-            stemPlayers.clear()
 
             val uri =
                 if (
@@ -1154,7 +1135,6 @@ class AndroidAudioEngine(
             return
         }
         player?.pause()
-        stemPlayers.values.forEach { it.pause() }
     }
 
     override fun resume() {
@@ -1165,11 +1145,9 @@ class AndroidAudioEngine(
         player?.let {
             if (it.playbackState == Player.STATE_ENDED) {
                 it.seekTo(0)
-                stemPlayers.values.forEach { sp -> sp.seekTo(0) }
             }
             it.play()
         }
-        stemPlayers.values.forEach { it.play() }
     }
 
     override fun stop() {
@@ -1178,7 +1156,6 @@ class AndroidAudioEngine(
             return
         }
         player?.stop()
-        stemPlayers.values.forEach { it.stop() }
     }
 
     override fun seekTo(positionMs: Long) {
@@ -1211,7 +1188,6 @@ class AndroidAudioEngine(
                 onBufferingChanged?.invoke(true)
                 val targetPos = positionMs.coerceAtLeast(0L)
                 currentPlayer.seekTo(targetPos)
-                stemPlayers.values.forEach { it.seekTo(targetPos) }
             }
 
         } catch (_: Exception) {
@@ -1406,12 +1382,6 @@ class AndroidAudioEngine(
         dynamicsProcessing?.release()
         dynamicsProcessing = null
 
-        stemPlayers.values.forEach {
-            it.stop()
-            it.release()
-        }
-        stemPlayers.clear()
-
         // 4. Cancel coroutines to prevent memory leaks
         engineScope.cancel()
 
@@ -1579,87 +1549,9 @@ class AndroidAudioEngine(
             }
 
             chapters.distinctBy { "${it.title}_${it.startMs}" }.sortedBy { it.startMs } } }
-    private fun preloadDrumSamples() {
-        engineScope.launch(Dispatchers.IO) {
-            try {
-                val assetManager = context.assets
-                val files = assetManager.list("samples/drum") ?: emptyArray()
-                
-                files.forEach { fileName ->
-                    if (fileName.endsWith(".wav", ignoreCase = true)) {
-                        try {
-                            val path = "samples/drum/$fileName"
-                            val afd = assetManager.openFd(path)
-                            val rawName = fileName.substringBeforeLast(".").uppercase()
-                            val label = rawName.replace(" ", "-").replace("_", "-")
-                            
-                            // Determine Kit from prefix/contents or fallback to hash-based distribution
-                            val kitKey = when {
-                                label.contains("808") -> "NEURAL"
-                                label.contains("GRIME") || label.contains("INDUSTRIAL") || label.contains("DEVASTATE") || label.contains("TEKK") -> "INDUSTRIAL"
-                                label.contains("LOFI") || label.contains("VINYL") || label.contains("TAPE") || label.contains("CASSETTE") -> "LOFI"
-                                label.contains("RETRO") || label.contains("JUNO") || label.contains("CHIP") || label.contains("ANALOG") || label.contains("USSR") -> "RETRO"
-                                else -> {
-                                    val hash = label.hashCode().let { if (it < 0) -it else it }
-                                    when (hash % 4) {
-                                        0 -> "NEURAL"
-                                        1 -> "INDUSTRIAL"
-                                        2 -> "LOFI"
-                                        else -> "RETRO"
-                                    }
-                                }
-                            }
-                            
-                            val kitMap = kitSounds.getOrPut(kitKey) { mutableMapOf() }
-                            val soundId = soundPool.load(afd, 1)
-                            kitMap[label] = soundId
-                            
-                            // Map generic triggers for this kit
-                            val genericLabels = listOf("KICK", "SNARE", "HIHAT", "HATS", "CLAP", "PERC", "TOM")
-                            genericLabels.forEach { generic ->
-                                if (label.contains(generic) && !kitMap.containsKey(generic)) {
-                                    kitMap[generic] = soundId
-                                }
-                            }
-                        } catch (e: Exception) {
-                            println("pEQControl: [SAMPLES] Failed to load $fileName: ${e.message}")
-                        }
-                    }
-                }
-                println("pEQControl: [SAMPLES] Synchronized ${kitSounds.size} kits with ${kitSounds.values.sumOf { it.size }} triggers")
-            } catch (e: Exception) {
-                println("pEQControl: [SAMPLES] Asset scan failed: ${e.message}")
-            }
-        }
-    }
 
-    override fun playDrumSample(label: String, index: Int) {
-        val kitKey = when {
-            label.contains("808") -> "NEURAL"
-            label.contains("GRIME") -> "INDUSTRIAL"
-            label.contains("LOFI") -> "LOFI"
-            label.contains("RETRO") || label.contains("JUNO") || label.contains("WARP") -> "RETRO"
-            else -> currentDrumKitName
-        }
-        
-        val kitMap = kitSounds[kitKey] ?: kitSounds["NEURAL"] ?: return
-        val target = label.uppercase()
-        
-        var soundId = kitMap[target] 
-            ?: kitMap.entries.find { it.key.startsWith("$target-") || it.key.contains(target) }?.value
-        
-        if (soundId == null && index >= 0) {
-            val generic = listOf("KICK", "SNARE", "HAT", "TOM", "CLAP", "PERC").find { target.contains(it) }
-            soundId = if (generic != null) kitMap[generic] else kitMap.values.elementAtOrNull(index % kitMap.size)
-        }
 
-        if (soundId != null) {
-            val velocity = 0.85f + (Math.random().toFloat() * 0.15f)
-            soundPool.play(soundId, velocity, velocity, 1, 0, 1f)
-        }
-    }
 
-    override fun getLoadedSampleLabels(): List<String> = (kitSounds[currentDrumKitName] ?: mutableMapOf()).keys.toList()
 
     @OptIn(UnstableApi::class)
     override fun setVideoScalingMode(mode: Int) {
@@ -1946,31 +1838,6 @@ class AndroidAudioEngine(
         println("pEQControl: [NEURAL] Clarity Level -> $level")
     }
 
-    override fun updateStemVolume(stem: String, volume: Float) {
-        println("pEQControl: [STEM] Volume $stem -> $volume")
-        if (AndroidBass.isLoaded) {
-            val handle = stemHandles[stem.lowercase()]
-            if (handle != null && handle != 0) {
-                AndroidBass.channelSetAttribute(handle, 2, volume) // 2 = BASS_ATTRIB_VOL
-                return
-            }
-        }
-        loopHandler.post {
-            stemPlayers[stem]?.volume = volume
-        }
-    }
-    
-    override fun updateStemPan(stem: String, pan: Float) {
-        println("pEQControl: [STEM] Pan $stem -> $pan")
-        if (AndroidBass.isLoaded) {
-            val handle = stemHandles[stem.lowercase()]
-            if (handle != null && handle != 0) {
-                AndroidBass.channelSetAttribute(handle, 3, pan) // 3 = BASS_ATTRIB_PAN
-                return
-            }
-        }
-    }
-
     override fun setDeepBassLevel(level: Float) {
         println("pEQControl: [NEURAL] Deep Bass Level -> $level")
     }
@@ -1994,13 +1861,6 @@ class AndroidAudioEngine(
         // Using OpenSL ES or AAudio directly. For now we simulate with a log.
     }
     
-    override fun startTuner() {
-        println("pEQControl: [TUNER] Started")
-    }
-
-    override fun stopTuner() {
-        println("pEQControl: [TUNER] Stopped")
-    }
     override fun forceBluetoothCodec(codec: String) {}
     @RequiresApi(Build.VERSION_CODES.P)
     override fun toggleVocalRemoval(enabled: Boolean) {
@@ -2083,59 +1943,6 @@ class AndroidAudioEngine(
             }
         }
     }
-    override fun loadStems(
-        stems: Map<String, String>
-    ) {
-        println("pEQControl: Loading stems -> $stems")
-        if (AndroidBass.isLoaded) {
-            try {
-                stemHandles.values.forEach { AndroidBass.channelStop(it) }
-                stemHandles.clear()
-                stems.forEach { (name, url) ->
-                    val path = cleanLocalPath(url)
-                    val handle = AndroidBass.streamCreateFile(path, 0)
-                    if (handle != 0) {
-                        stemHandles[name.lowercase()] = handle
-                        AndroidBass.channelPlay(handle, true)
-                    }
-                }
-                println("pEQControl: [BASS] Android loaded stems: ${stems.keys}")
-                return
-            } catch (e: Exception) {
-                println("pEQControl: [BASS] Android stem loading failed: ${e.message}")
-            }
-        }
-        loopHandler.post {
-            stemPlayers.values.forEach {
-                it.stop()
-                it.release()
-            }
-            stemPlayers.clear()
-
-            player?.volume = 0f
-
-            stems.forEach { (name, path) ->
-                val stemPlayer = ExoPlayer.Builder(context).build().apply {
-                    val mediaItem = MediaItem.fromUri(android.net.Uri.parse(path))
-                    setMediaItem(mediaItem)
-                    prepare()
-                    repeatMode = player?.repeatMode ?: Player.REPEAT_MODE_OFF
-                }
-                stemPlayers[name] = stemPlayer
-            }
-            
-            val playing = player?.isPlaying ?: false
-            val currentPos = player?.currentPosition ?: 0L
-            stemPlayers.values.forEach {
-                it.seekTo(currentPos)
-                if (playing) {
-                    it.play()
-                }
-            }
-            println("pEQControl: [STEMS] Android multi-track session initialized with ${stems.size} stems")
-        }
-    }
-
     private fun formatTimeLrc(ms: Long): String {
         val totalSec = ms / 1000
         val min = totalSec / 60

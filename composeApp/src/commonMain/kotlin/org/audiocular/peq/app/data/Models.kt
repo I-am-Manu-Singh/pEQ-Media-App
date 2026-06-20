@@ -9,7 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 
 @Serializable
-enum class MediaType { AUDIO, VIDEO, STEM, PROJECT }
+enum class MediaType { AUDIO, VIDEO }
 @Serializable
 enum class RepeatMode { OFF, ALL, ONE, FOLDER }
 @Serializable
@@ -27,30 +27,28 @@ data class pEQMediaItem(
     val sampleRate: Int = 44100,
     val isHiRes: Boolean = false,
     val isLossless: Boolean = false,
-    val resolution: String? = null, // For Video
-    val codec: String? = null,     // For Video
-    val artist: String? = null,    // For Audio
-    val album: String? = null,     // For Audio
-    val albumArtist: String? = null, // ✅ New
-    val composer: String? = null,    // ✅ New
-    val genre: String? = null,       // ✅ New
-    val trackNumber: Int? = null,    // ✅ New
-    val discNumber: Int? = null,     // ✅ New
-    val year: Int? = null,          // ✅ New
-    val bitrate: Int = 0,           // ✅ New (kbps)
-    val channels: Int = 2,          // ✅ New
-    val dateAdded: Long = 0,        // ✅ New
-    val lastPlayed: Long = 0,       // ✅ New
+    val resolution: String? = null,  
+    val codec: String? = null,      
+    val artist: String? = null,     
+    val album: String? = null,      
+    val albumArtist: String? = null,  
+    val composer: String? = null,     
+    val genre: String? = null,        
+    val trackNumber: Int? = null,     
+    val discNumber: Int? = null,      
+    val year: Int? = null,           
+    val bitrate: Int = 0,            
+    val channels: Int = 2,           
+    val dateAdded: Long = 0,         
+    val lastPlayed: Long = 0,        
     val dateModified: Long = 0,
     val isFavorite: Boolean = false,
-    val frameRate: Float = 0f,      // ✅ New
-    val videoWidth: Int = 0,       // ✅ Required
-    val videoHeight: Int = 0,      // ✅ Required
-    val playCount: Int = 0,        // ✅ Tracking Popularity
-    val isStream: Boolean = false,  // ✅ Web Streaming Support
-    val lyrics: String? = null,     // 📝 Embedded Lyrics
-    val bpm: Float? = null,        // 🧠 Neural BPM
-    val key: String? = null        // 🧠 Neural Key
+    val frameRate: Float = 0f,       
+    val videoWidth: Int = 0,        
+    val videoHeight: Int = 0,       
+    val playCount: Int = 0,         
+    val isStream: Boolean = false,    
+    val lyrics: String? = null
 ) {
     val fileName: String get() = path.substringAfterLast("/")
     val displaySize: String get() = "${sizeBytes / 1024 / 1024.0f}MB"
@@ -157,23 +155,6 @@ data class AutoEqProfile(
 )
 
 
-@Serializable
-data class BeatEvent(
-    val soundId: String,
-    val timestamp: Long
-)
-
-@Serializable
-data class DrumKit(
-    val name: String, 
-    val labels: List<String>
-)
-
-@Serializable
-data class DrumTutorial(
-    val name: String, 
-    val steps: List<List<String>> = emptyList()
-)
 @Serializable
 data class StreamFormats(
 

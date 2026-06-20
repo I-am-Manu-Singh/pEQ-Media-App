@@ -28,7 +28,6 @@ import kotlinx.datetime.Clock
 import org.audiocular.peq.app.Tab
 import org.audiocular.peq.app.data.pEQMediaItem
 import org.audiocular.peq.app.ai.pEQCloudDownloader
-import org.audiocular.peq.app.ai.pEQStemSplitter
 import org.audiocular.peq.app.audio.AudioEngine
 import kotlinx.coroutines.*
 import org.audiocular.peq.app.data.*
@@ -59,8 +58,6 @@ open class AppViewModel(
     val audioEngine: AudioEngine,
 
     val persistenceManager: PersistenceManager,
-
-    val stemSplitter: pEQStemSplitter? = null,
 
     val cloudDownloader: pEQCloudDownloader? = null
 
@@ -128,12 +125,9 @@ val client = createHttpClient()
     
     val playbackSpeed = mutableStateOf(1.0f)
     val peakLevelDb = mutableStateOf(-60f)
-    val isKitBuilderActive = mutableStateOf(false)
-    val editingPadIndex = mutableStateOf(-1)
     val toastMessage = mutableStateOf<String?>(null)
     
     var onPickFolderRequested: (() -> Unit)? = null
-    var onRestoreSamplesRequested: (() -> Unit)? = null
     var onPickLyricsRequested: (() -> Unit)? = null
     var onPickSubtitleRequested: (() -> Unit)? = null
     var onPickChaptersRequested: (() -> Unit)? = null
@@ -222,25 +216,6 @@ val client = createHttpClient()
     val eqQs = mutableStateListOf(1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f)
     val convolverIrPath = mutableStateOf<String?>(null)
     val favorites = mutableStateListOf<String>()
-    val stemVolumes = mutableStateMapOf<String, Float>().apply {
-        put("vocals", 1.0f)
-        put("drums", 1.0f)
-        put("bass", 1.0f)
-        put("piano", 1.0f)
-        put("guitar", 1.0f)
-        put("other", 1.0f)
-    }
-    val stemMutes = mutableStateMapOf<String, Boolean>()
-    val stemSolos = mutableStateMapOf<String, Boolean>()
-    val stemPans = mutableStateMapOf<String, Float>().apply {
-        put("vocals", 0f)
-        put("drums", 0f)
-        put("bass", 0f)
-        put("piano", 0f)
-        put("guitar", 0f)
-        put("other", 0f)
-    }
-
     // 📝 Lyrics & Temporal Metadata
     val syncedLyrics = mutableStateListOf<SyncedLine>()
     val currentChapters = mutableStateListOf<MediaChapter>()
@@ -250,7 +225,6 @@ val client = createHttpClient()
     val isEditingChapters = mutableStateOf(false)
     val isEditingSubtitles = mutableStateOf(false)
     val isMoodMakerVisible = mutableStateOf(false)
-    val isHarmonyVisible = mutableStateOf(false)
     val selectedItems = mutableStateListOf<pEQMediaItem>()
     
 
@@ -266,18 +240,11 @@ val client = createHttpClient()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     
     internal val scanFolders = mutableStateListOf<String>()
-    internal val currentStep = mutableIntStateOf(0)
-    internal val isSequencerActive = mutableStateOf(false)
     val isHapticsEnabled = mutableStateOf(true)
-    internal val selectedTutorial = mutableStateOf<DrumTutorial?>(null)
     
     // 🌀 Convolution & Dynamics Engine
     val convolverIrName = mutableStateOf("Reference Room (Default)")
     val convolverIrDryWet = mutableFloatStateOf(0.3f)
-    
-    val sequencerSteps = List(16) { mutableStateOf(false) }
-    
-    val currentKey = mutableStateOf("C Major")
     
     val isConvolverActive = mutableStateOf(false)
     val compressorThreshold = mutableFloatStateOf(-20f)
@@ -294,16 +261,8 @@ val client = createHttpClient()
     val isNeuralSaturationEnabled = mutableStateOf(false)
     val detectedPitch = mutableFloatStateOf(0f)
     val detectedNote = mutableStateOf("-")
-    val detectedChord = mutableStateOf<String?>(null)
     val centsDeviation = mutableIntStateOf(0)
-    val isTunerActive = mutableStateOf(false)
     
-    // 🕒 Master Clock Engine
-    val detectedBpm = mutableFloatStateOf(120f)
-    val masterBpm = mutableFloatStateOf(120f)
-    val timeSignatureNumerator = mutableIntStateOf(4)
-    val timeSignatureDenominator = mutableIntStateOf(4)
-    val isMetronomeActive = mutableStateOf(false)
     val isGaplessEnabled = mutableStateOf(true)
     val isBackgroundServiceRunning = mutableStateOf(true)
     val isBitPerfectEnabled = mutableStateOf(false)
@@ -311,9 +270,6 @@ val client = createHttpClient()
     val isDynamicColorsEnabled = mutableStateOf(true)
     val bufferPriority = mutableStateOf("High")
     val channelBalance = mutableFloatStateOf(0f)
-    val transposeSemiTones = mutableIntStateOf(0)
-    val guitarCapoPos = mutableIntStateOf(0)
-    val selectedScale = mutableStateOf("Chromatic")
     val isNeuralEnvActive = mutableStateOf(false)
     val activeJob = mutableStateOf<SplitJob?>(null)
     val backgroundJobs = mutableStateListOf<SplitJob>()
@@ -355,8 +311,6 @@ val client = createHttpClient()
                             val notes = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
                             val note = notes[noteIdx.coerceIn(0, 11)]
                             detectedNote.value = note
-                            val chordSuffix = if (idHash % 2 == 0) "" else "m"
-                            detectedChord.value = "$note$chordSuffix"
                         }
                     }
                 } else {
@@ -377,7 +331,6 @@ val client = createHttpClient()
                                 preDspLevel.value = 0f
                                 detectedPitch.value = 0f
                                 detectedNote.value = ""
-                                detectedChord.value = ""
                             }
                         }
                     }
@@ -414,9 +367,6 @@ val client = createHttpClient()
                     val note = notes[noteIdx.coerceIn(0, 11)]
                     
                     detectedNote.value = note
-                    // Improved chord estimation (simulated)
-                    val chordSuffix = if (idHash % 2 == 0) "" else "m"
-                    detectedChord.value = "$note$chordSuffix"
                     detectedPitch.value = freq
                     centsDeviation.value = ((1200 * log2(freq / 440.0)) % 100).toInt()
                 } else if (isPlaying.value) {
@@ -427,10 +377,6 @@ val client = createHttpClient()
                     val notes = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
                     val note = notes[noteIdx.coerceIn(0, 11)]
                     detectedNote.value = note
-                    val chordSuffix = if (idHash % 2 == 0) "" else "m"
-                    detectedChord.value = "$note$chordSuffix"
-                } else {
-                    detectedChord.value = "READY"
                 }
             }
         }
@@ -525,14 +471,7 @@ val client = createHttpClient()
     
 
     
-    val drumKits = mutableStateListOf<DrumKit>()
-    val drumTutorials = mutableStateListOf<DrumTutorial>()
-    
-    // 🥁 BEAT CREATION ENGINE
-    val isRecordingBeats = mutableStateOf(false)
-    val isPlayingBeats = mutableStateOf(false)
-    val drumPadLabels = mutableStateListOf<String>()
-    private var beatStartTime = 0L
+        // 🥁 BEAT CREATION ENGINE
     internal var persistenceCounter = 0
     
     internal var _scanner: pEQFileScanner? = null
@@ -556,23 +495,6 @@ val client = createHttpClient()
                 val profiles = Json.decodeFromString<List<AutoEqProfile>>(autoeqJson)
                 autoEqProfiles.clear()
                 autoEqProfiles.addAll(profiles)
-
-                val kitsJson = scanner?.readResourceContent("drum_kits.json") ?: "[]"
-                val kits = Json.decodeFromString<List<DrumKit>>(kitsJson)
-                drumKits.clear()
-                drumKits.addAll(kits)
-                if (kits.isNotEmpty()) {
-                    selectedDrumKit.value = kits[0]
-                    drumPadLabels.addAll(kits[0].labels)
-                }
-                
-                val tutsJson = scanner?.readResourceContent("drum_tutorials.json") ?: "[]"
-                val tuts = Json.decodeFromString<List<DrumTutorial>>(tutsJson)
-                drumTutorials.clear()
-                drumTutorials.addAll(tuts)
-                
-                loadSampleLibrary()
-                loadChordLibrary()
             } catch (e: Exception) {
                 println("pEQControl: [ENGINE] Asset Loading Failure -> ${e.message}")
             }
@@ -627,15 +549,6 @@ val client = createHttpClient()
     // 🧠 AI & Sync Engine
     val currentLyricsLine = mutableStateOf(0)
     val rtaData = mutableStateOf(FloatArray(32))
-    val detectedBpmMap = mutableStateMapOf<String, Float>()
-    val detectedKeyMap = mutableStateMapOf<String, String>()
-    val currentChord = mutableStateOf("Cmaj7")
-    
-    val isAnalyzingAudio = mutableStateOf(false)
-    val isSplittingStems = mutableStateOf(false)
-    val isLearnModeActive = mutableStateOf(false)
-    val chordRepresentation = mutableStateOf("Piano")
-    val manualTempo = mutableStateOf(120f)
     val exportFormat = mutableStateOf("WAV")
     val exportSampleRate = mutableStateOf(48000)
     val isDitheringEnabled = mutableStateOf(true)
@@ -694,14 +607,7 @@ val client = createHttpClient()
     internal fun cancelSleepTimerJob() {
         sleepTimerJob?.cancel()
     }
-    internal fun quantizeRecordedBeats() {}
     val isPlaylistPickerShown = mutableStateOf(false)
-    val showStemSplitter = mutableStateOf(false)
-    val drumKitVolume = mutableStateOf(1.0f)
-    val drumReverb = mutableStateOf(0.0f)
-    val drumDelay = mutableStateOf(0.0f)
-    val drumPadVolumes = mutableStateMapOf<Int, Float>()
-    val isRecordingDrumSession = mutableStateOf(false)
     val isMicMonitoringEnabled = mutableStateOf(false)
     val isSubtitlesEnabled = mutableStateOf(false)
     val isPipActive = mutableStateOf(false)
@@ -755,11 +661,6 @@ val client = createHttpClient()
     val diagnosticLog = mutableStateListOf<String>()
     val isDiagnosticRunning = mutableStateOf(false)
     
-    val selectedDrumKit = mutableStateOf<DrumKit?>(null)
-
-    
-    val guideStep = mutableStateOf(0)
-    val sequencerTriggeredPads = mutableStateMapOf<String, Boolean>()
     private val _selectedTheme = mutableStateOf(pEQTheme.DARK)
     val selectedTheme: State<pEQTheme> = _selectedTheme
     internal fun setTheme(theme: pEQTheme) { _selectedTheme.value = theme }
@@ -767,36 +668,6 @@ val client = createHttpClient()
     private val _selectedAccent = mutableStateOf(pEQAccent.AMBER)
     val selectedAccent: State<pEQAccent> = _selectedAccent
     internal fun setAccent(accent: pEQAccent) { _selectedAccent.value = accent }
-    
-    val sampleLibrary = mutableStateMapOf<String, List<String>>()
-    
-    private fun loadSampleLibrary() {
-        scope.launch {
-            try {
-                val json = scanner?.readResourceContent("sample_library.json") ?: "{}"
-                val data = Json.decodeFromString<Map<String, List<String>>>(json)
-                sampleLibrary.clear()
-                sampleLibrary.putAll(data)
-            } catch (e: Exception) {
-                println("pEQControl: [ENGINE] Sample Library Loading Failure -> ${e.message}")
-            }
-        }
-    }
-
-    val chordLibrary = mutableStateMapOf<String, Map<String, List<Int>>>()
-    
-    private fun loadChordLibrary() {
-        scope.launch {
-            try {
-                val json = scanner?.readResourceContent("chord_library.json") ?: "{}"
-                val data = Json.decodeFromString<Map<String, Map<String, List<Int>>>>(json)
-                chordLibrary.clear()
-                chordLibrary.putAll(data)
-            } catch (e: Exception) {
-                println("pEQControl: [ENGINE] Chord Library Loading Failure -> ${e.message}")
-            }
-        }
-    }
     
     internal fun enqueueJob(job: SplitJob) {
         backgroundJobs.add(job)
@@ -892,6 +763,4 @@ val client = createHttpClient()
         }
     }
 }
-
-
 

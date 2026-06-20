@@ -142,10 +142,6 @@ kotlin {
                 )
 
                 implementation(
-                    "com.microsoft.onnxruntime:onnxruntime-android:1.17.1"
-                )
-
-                implementation(
                     "androidx.work:work-runtime-ktx:2.9.0"
                 )
 
@@ -331,6 +327,25 @@ android {
         versionCode = 1
 
         versionName = "1.0.0"
+    }
+
+    splits {
+
+        abi {
+
+            isEnable = true
+
+            reset()
+
+            include(
+                "arm64-v8a",
+                "armeabi-v7a",
+                "x86",
+                "x86_64"
+            )
+
+            isUniversalApk = false
+        }
     }
 
     packaging {

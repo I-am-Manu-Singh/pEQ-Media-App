@@ -79,7 +79,6 @@ fun main(args: Array<String>) {
             AppViewModel(
                 audioEngine = audioEngine,
                 persistenceManager = DesktopPersistenceManager(),
-                stemSplitter = org.audiocular.peq.app.ai.DesktoppEQStemSplitter(),
                 cloudDownloader = null
             ).apply {
                 scanner = DesktopFileScanner()

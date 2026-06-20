@@ -432,8 +432,3 @@ private fun parseTimeToMs(time: String): Long {
 fun AppViewModel.readFileContent(path: String): String? {
     return scanner?.readFileContent(path)
 }
-
-fun AppViewModel.enqueueSplitJob(item: pEQMediaItem) {
-    currentMediaItem.value = item
-    startStemSplit()
-}

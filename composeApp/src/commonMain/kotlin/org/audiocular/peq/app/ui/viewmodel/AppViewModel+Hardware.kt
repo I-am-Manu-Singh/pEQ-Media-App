@@ -96,19 +96,11 @@ fun AppViewModel.startHardwarePolling() {
                     
                     withContext(Dispatchers.Main) {
                         detectedPitch.value = freq
-                        // Rough estimate for chord detection based on fundamental
-                        val notes = listOf("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
-                        val noteIdx = (12 * log2(freq / 440.0) + 69).toInt() % 12
-                        if (noteIdx in 0..11) {
-                            detectedChord.value = notes[noteIdx]
-                            currentKey.value = "${notes[noteIdx]} Harmonic"
-                        }
                     }
                 } else {
                     withContext(Dispatchers.Main) {
                         rtaData.value = FloatArray(32) { 0f }
                         detectedPitch.floatValue = 0f
-                        detectedChord.value = null
                     }
                 }
                 

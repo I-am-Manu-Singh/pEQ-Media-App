@@ -1071,18 +1071,17 @@ fun MainScreen(
 
                 if (
                     !isWideScreen &&
-                    !viewModel.showSettings.value &&
                     !isPlayerActive &&
                     !isVideoFullScreen
                 ) {
 
                    BottomNavigationBar(
-    current = currentTab,
-    viewModel = viewModel,
-    onSelect = {
-        viewModel.currentTab.value = it
-    }
-)
+                    current = currentTab,
+                    viewModel = viewModel,
+                    onSelect = {
+                        viewModel.currentTab.value = it
+                    }
+                )
                 }
             }
 
@@ -1124,185 +1123,185 @@ fun MainScreen(
                     // NORMAL APP LAYOUT
                     // =========================
 
-                    if (!viewModel.showSettings.value) {
+                    Row(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
 
-                        Row(
-                            modifier = Modifier.fillMaxSize()
+                        // =========================
+                        // TABLET / LANDSCAPE NAV
+                        // =========================
+
+                        if (
+                            isWideScreen &&
+                            !isPlayerActive
                         ) {
 
-                            // =========================
-                            // TABLET / LANDSCAPE NAV
-                            // =========================
+                            Column(
 
-                            if (
-                                isWideScreen &&
-                                !isPlayerActive
+                                modifier = Modifier
+                                    .width(240.dp)
+                                    .fillMaxHeight()
+                                    .statusBarsPadding()
+                                    .background(
+                                        MaterialTheme.colorScheme.surface
+                                    )
+                                    .padding(16.dp),
+
+                                verticalArrangement =
+                                    Arrangement.spacedBy(12.dp)
                             ) {
 
-                                Column(
-
+                                Row(
                                     modifier = Modifier
-                                        .width(240.dp)
-                                        .fillMaxHeight()
-                                        .statusBarsPadding()
-                                        .background(
-                                            MaterialTheme.colorScheme.surface
-                                        )
-                                        .padding(16.dp),
-
-                                    verticalArrangement =
-                                        Arrangement.spacedBy(12.dp)
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .clickable { viewModel.currentTab.value = Tab.Player }
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 12.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .clickable { viewModel.currentTab.value = Tab.Player }
-                                            .padding(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
+                                     Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        modifier = Modifier.size(42.dp)
                                     ) {
-                                         Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                            modifier = Modifier.size(42.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Image(
-                                                    painter = painterResource(Res.drawable.app_icon),
-                                                    contentDescription = null,
-                                                    modifier = Modifier.fillMaxSize(), 
-                                                    contentScale = ContentScale.Crop
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Image(
+                                                painter = painterResource(Res.drawable.app_icon),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(), 
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(Modifier.width(12.dp))
+
+                                    Column {
+                                        Text(
+                                            text = "pEQ",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 20.sp,
+                                            letterSpacing = 1.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "TAP TO OPEN PLAYER",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 7.sp,
+                                            letterSpacing = 0.5.sp,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+
+                                Spacer(
+                                    Modifier.height(24.dp)
+                                )
+
+                                NavigationRailSection(
+                                    viewModel
+                                )
+                            }
+                        }
+
+                        // =========================
+                        // MAIN CONTENT
+                        // =========================
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .then(
+
+                                    if (
+                                        !isWideScreen &&
+                                        !isPlayerActive
+                                    ) {
+
+                                        Modifier.padding(
+                                            paddingValues
+                                        )
+
+                                    } else {
+
+                                        Modifier
+                                    }
+                                )
+                        ) {
+
+                            AnimatedContent(
+                                targetState = currentTab,
+
+                                transitionSpec = {
+
+                                    fadeIn(
+                                        tween(220)
+                                    ).togetherWith(
+
+                                        fadeOut(
+                                            tween(160)
+                                        )
+                                    )
+                                },
+
+                                label = "main_content"
+                            ) { tab ->
+
+                                when (tab) {
+
+                                    Tab.Dashboard -> {
+
+                                        pEQWorkstationDashboard(
+                                            viewModel
+                                        )
+                                    }
+
+                                    Tab.Tuning -> {
+
+                                        TuningScreen(viewModel)
+                                    }
+
+                                    Tab.Player -> {
+
+                                        val currentItem =
+                                            viewModel.currentMediaItem.value
+
+                                        if (currentItem != null) {
+
+                                            key(currentItem.path) {
+
+                                                PlayerScreen(
+                                                    viewModel = viewModel,
+                                                    item = currentItem
                                                 )
                                             }
-                                        }
-                                        
-                                        Spacer(Modifier.width(12.dp))
 
-                                        Column {
-                                            Text(
-                                                text = "pEQ",
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 20.sp,
-                                                letterSpacing = 1.sp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = "TAP TO OPEN PLAYER",
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 7.sp,
-                                                letterSpacing = 0.5.sp,
-                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        } else {
+
+                                            EmptyPlayerState(
+                                                onBack = {
+                                                    viewModel.currentTab.value =
+                                                        Tab.Dashboard
+                                                }
                                             )
                                         }
                                     }
 
-                                    Spacer(
-                                        Modifier.height(24.dp)
-                                    )
+                                    Tab.Hardware -> {
 
-                                    NavigationRailSection(
-                                        viewModel
-                                    )
-                                }
-                            }
+                                        HardwareScreen(viewModel)
+                                    }
 
-                            // =========================
-                            // MAIN CONTENT
-                            // =========================
+                                    Tab.Settings -> {
 
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .then(
-
-                                        if (
-                                            !isWideScreen &&
-                                            !isPlayerActive
-                                        ) {
-
-                                            Modifier.padding(
-                                                paddingValues
-                                            )
-
-                                        } else {
-
-                                            Modifier
-                                        }
-                                    )
-                            ) {
-
-                                AnimatedContent(
-                                    targetState = currentTab,
-
-                                    transitionSpec = {
-
-                                        fadeIn(
-                                            tween(220)
-                                        ).togetherWith(
-
-                                            fadeOut(
-                                                tween(160)
-                                            )
-                                        )
-                                    },
-
-                                    label = "main_content"
-                                ) { tab ->
-
-                                    when (tab) {
-
-                                        Tab.Dashboard -> {
-
-                                            pEQWorkstationDashboard(
-                                                viewModel
-                                            )
-                                        }
-
-                                        Tab.Tuning -> {
-
-                                            TuningScreen(viewModel)
-                                        }
-
-                                        Tab.Player -> {
-
-                                            val currentItem =
-                                                viewModel.currentMediaItem.value
-
-                                            if (currentItem != null) {
-
-                                                key(currentItem.path) {
-
-                                                    PlayerScreen(
-                                                        viewModel = viewModel,
-                                                        item = currentItem
-                                                    )
-                                                }
-
-                                            } else {
-
-                                                EmptyPlayerState(
-                                                    onBack = {
-                                                        viewModel.currentTab.value =
-                                                            Tab.Dashboard
-                                                    }
-                                                )
-                                            }
-                                        }
-
-                                        Tab.Hardware -> {
-
-                                            HardwareScreen(viewModel)
-                                        }
+                                        SettingsPanel(viewModel)
                                     }
                                 }
                             }
                         }
-                    } else {
-                        SettingsPanel(viewModel)
                     }
                 }
 

@@ -9,5 +9,6 @@ enum class Tab(val label: String, val icon: ImageVector) {
     Dashboard("DASHBOARD", Icons.Default.Dashboard),
     Tuning(pEQStrings.TUNING_TAB, Icons.Default.Troubleshoot),
     Hardware(pEQStrings.HARDWARE_TAB, Icons.Default.SettingsInputComponent),
+    Settings(pEQStrings.SETTINGS_LABEL, Icons.Default.Settings),
     Player("NOW PLAYING", Icons.Default.GraphicEq)
 }

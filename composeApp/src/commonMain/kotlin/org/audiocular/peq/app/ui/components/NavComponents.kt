@@ -94,7 +94,8 @@ fun BottomNavigationBar(
     val tabs = listOf(
         Tab.Dashboard,
         Tab.Tuning,
-        Tab.Hardware
+        Tab.Hardware,
+        Tab.Settings
     )
 
     Surface(
@@ -137,8 +138,8 @@ fun BottomNavigationBar(
                             onSelect(tab)
                         }
                         .padding(
-                            horizontal = 8.dp,
-                            vertical = 10.dp
+                             horizontal = 8.dp,
+                             vertical = 10.dp
                         ),
 
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -198,19 +199,6 @@ fun BottomNavigationBar(
 
                         color = iconColor
                     )
-
-                    if (isSelected) {
-
-                        Box(
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .size(4.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    MaterialTheme.colorScheme.primary
-                                )
-                        )
-                    }
                 }
             }
         }
@@ -222,4 +210,5 @@ private fun getTabIcon(tab: Tab): ImageVector = when(tab) {
     Tab.Player -> Icons.Default.MusicNote
     Tab.Hardware -> Icons.Default.Memory
     Tab.Tuning -> Icons.Default.GraphicEq
+    Tab.Settings -> Icons.Default.Settings
 }

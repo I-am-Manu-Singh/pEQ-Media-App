@@ -28,7 +28,6 @@ import org.audiocular.peq.app.ui.viewmodel.toggleNeuralSaturation
 import org.audiocular.peq.app.ui.viewmodel.searchAutoEqRepository
 import org.audiocular.peq.app.ui.viewmodel.applyAutoEqProfile
 import org.audiocular.peq.app.ui.components.pEQGlassCard
-import org.audiocular.peq.app.ui.components.ChordVisualizer
 import org.audiocular.peq.app.ui.components.*
 import kotlin.math.*
 import androidx.compose.ui.text.font.FontFamily

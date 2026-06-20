@@ -101,34 +101,40 @@ fun NeuralMoodMakerItem(viewModel: AppViewModel) {
                     )
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     types.forEach { type ->
                         val selected = selectedType == type
 
-                        Surface(
-                            onClick = { selectedType = type },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            },
-                            contentColor = if (selected) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                        Column(
+                            modifier = Modifier
+                                .clickable { selectedType = type },
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = type.uppercase(),
-                                modifier = Modifier.padding(
-                                    horizontal = 2.dp,
-                                    vertical = 0.dp
-                                ),
                                 fontSize = 8.sp,
-                                fontWeight = FontWeight.Black
+                                fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
+                                color = if (selected)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(Modifier.height(3.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .height(2.dp)
+                                    .width(22.dp)
+                                    .background(
+                                        if (selected)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            Color.Transparent,
+                                        RoundedCornerShape(50)
+                                    )
                             )
                         }
                     }
@@ -146,7 +152,7 @@ fun NeuralMoodMakerItem(viewModel: AppViewModel) {
 
                     Surface(
                         onClick = { selectedMood = mood },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(6.dp),
                         color = if (selected) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                         } else {
@@ -178,7 +184,7 @@ fun NeuralMoodMakerItem(viewModel: AppViewModel) {
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -595,9 +601,10 @@ fun pEQTabs(
     val downloads = viewModel.downloadQueue
 
     LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp)
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        userScrollEnabled = true
     ) {
         itemsIndexed(items = tabs) { index, title ->
             val selected = selectedTab == index
@@ -607,65 +614,77 @@ fun pEQTabs(
                 2 -> Icons.AutoMirrored.Filled.PlaylistPlay
                 3 -> Icons.AutoMirrored.Filled.QueueMusic
                 4 -> Icons.Default.Download
-                5 -> Icons.Default.Settings
                 else -> Icons.Default.Radio
             }
 
             val bubbleText = when (index) {
-                1 -> mediaLibrary.size.toString()
-                2 -> playlists.size.toString()
-                3 -> queue.size.toString()
-                4 -> downloads.size.toString()
+                4 -> {
+                    val activeCount = downloads.count { it.status != "COMPLETE" && !it.status.contains("ERROR") }
+                    if (activeCount > 0) activeCount.toString() else null
+                }
                 else -> null
             }
 
-            Surface(
-                onClick = { onTabSelected(index) },
-                shape = RoundedCornerShape(20.dp),
-                color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.82f),
-                border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
-                tonalElevation = if (selected) 6.dp else 1.dp
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(top = 6.dp, end = 8.dp)
             ) {
-                Box(
-                    modifier = Modifier.height(44.dp).padding(horizontal = if (selected) 16.dp else 12.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    onClick = { onTabSelected(index) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.82f),
+                    border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                    tonalElevation = if (selected) 6.dp else 1.dp
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    Box(
+                        modifier = Modifier.height(44.dp).padding(horizontal = if (selected) 16.dp else 12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(imageVector = icon, contentDescription = title, tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f), modifier = Modifier.size(18.dp))
-                        AnimatedVisibility(
-                            visible = selected,
-                            enter = fadeIn(tween(180)) + expandHorizontally(),
-                            exit = fadeOut(tween(120)) + shrinkHorizontally()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                            Icon(imageVector = icon, contentDescription = title, tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f), modifier = Modifier.size(18.dp))
+                            AnimatedVisibility(
+                                visible = selected,
+                                enter = fadeIn(tween(180)) + expandHorizontally(),
+                                exit = fadeOut(tween(120)) + shrinkHorizontally()
                             ) {
-                                Spacer(Modifier.width(6.dp))
-                                Text(text = title, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.2.sp, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Visible)
-                            }
-                        }
-
-                        // Display Bubble Badge count if positive
-                        if (bubbleText != null && bubbleText != "0") {
-                            Spacer(Modifier.width(6.dp))
-                            Surface(
-                                shape = CircleShape,
-                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                                modifier = Modifier.size(18.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = bubbleText,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = if (selected) Color.Black else MaterialTheme.colorScheme.primary
-                                    )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(text = title, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.2.sp, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Visible)
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Display Bubble Badge count if positive, offset outside the chip boundary
+                if (bubbleText != null && bubbleText != "0") {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 6.dp, y = (-6).dp)
+                            .size(18.dp),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Text(
+                                text = bubbleText,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onError,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
