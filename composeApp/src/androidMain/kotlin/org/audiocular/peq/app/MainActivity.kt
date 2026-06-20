@@ -63,6 +63,64 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    private fun getCacheFileForUri(uri: android.net.Uri): java.io.File? {
+        try {
+            var displayName: String? = null
+            if (uri.scheme == "content") {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            displayName = cursor.getString(nameIndex)
+                        }
+                    }
+                }
+            }
+            val finalName = displayName ?: uri.path?.substringAfterLast("/") ?: "temp_media"
+            val cacheDir = java.io.File(cacheDir, "content_cache").apply { mkdirs() }
+            cacheDir.listFiles()?.forEach { it.delete() }
+            val cacheFile = java.io.File(cacheDir, finalName)
+            contentResolver.openInputStream(uri)?.use { input ->
+                cacheFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            return cacheFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    private fun getPathFromUri(uri: android.net.Uri): String {
+        try {
+            if (uri.toString().contains("/tree/")) {
+                val docId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+                if (docId != null) {
+                    val split = docId.split(":")
+                    val type = split.getOrNull(0)
+                    val relativePath = split.getOrNull(1) ?: ""
+                    if ("primary".equals(type, ignoreCase = true)) {
+                        return "/storage/emulated/0/$relativePath"
+                    } else if (type != null && type.isNotEmpty()) {
+                        val path = "/storage/$type/$relativePath"
+                        if (java.io.File(path).exists()) {
+                            return path
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        val rawPath = uri.path?.substringAfterLast(":") ?: uri.toString()
+        return if (rawPath.startsWith("/storage/") || rawPath.startsWith("/sdcard")) {
+            rawPath
+        } else {
+            "/storage/emulated/0/$rawPath"
+        }
+    }
+
     private lateinit var viewModel: AppViewModel
     private var volumeReceiver: VolumeBroadcastReceiver? = null
     private var mediaCommandReceiver: BroadcastReceiver? = null
@@ -143,12 +201,7 @@ class MainActivity : ComponentActivity() {
         val folderPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let {
                 contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                val rawPath = it.path?.substringAfterLast(":") ?: it.toString()
-                val realPath = if (rawPath.startsWith("/storage/") || rawPath.startsWith("/sdcard")) {
-                    rawPath
-                } else {
-                    "/storage/emulated/0/$rawPath"
-                }
+                val realPath = getPathFromUri(it)
                 viewModel.addScanFolder(realPath)
             }
         }
@@ -237,27 +290,14 @@ class MainActivity : ComponentActivity() {
 
         val trackPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
-                val path = it.toString()
-                var displayName: String? = null
-                var sizeBytes = 0L
+                val cacheFile = if (it.scheme == "content") getCacheFileForUri(it) else null
+                val fileToUse = cacheFile ?: if (it.scheme == "file") java.io.File(it.path ?: "") else null
+                val path = fileToUse?.absolutePath ?: it.toString()
+                var displayName = fileToUse?.name ?: it.path?.substringAfterLast("/")
+                var sizeBytes = fileToUse?.length() ?: 0L
                 var mimeType: String? = null
-
-                if (it.scheme == "content") {
-                    mimeType = contentResolver.getType(it)
-                    try {
-                        contentResolver.query(it, null, null, null, null)?.use { cursor ->
-                            if (cursor.moveToFirst()) {
-                                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                                if (nameIndex != -1) {
-                                    displayName = cursor.getString(nameIndex)
-                                }
-                                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                                if (sizeIndex != -1) {
-                                    sizeBytes = cursor.getLong(sizeIndex)
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {}
+                if (fileToUse != null) {
+                    mimeType = java.net.URLConnection.guessContentTypeFromName(fileToUse.name)
                 }
 
                 val finalName = displayName ?: path.substringAfterLast("/")
@@ -284,6 +324,38 @@ class MainActivity : ComponentActivity() {
         }
         viewModel.onPickTrackRequested = {
             trackPickerLauncher.launch(arrayOf("audio/*", "video/*"))
+        }
+
+        // Cleanup temporary cache files and stems to resolve excess storage footprint (keep total footprint under 50MB)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val statePrefs = getSharedPreferences("pEQ_player_state", Context.MODE_PRIVATE)
+                val currentTrackUriStr = statePrefs.getString("track_uri", null)
+                val activePath = currentTrackUriStr?.let { android.net.Uri.parse(it).path }
+
+                // 1. Cleanup content_cache
+                val contentCacheDir = java.io.File(cacheDir, "content_cache")
+                if (contentCacheDir.exists() && contentCacheDir.isDirectory) {
+                    contentCacheDir.listFiles()?.forEach { file ->
+                        // Don't delete currently active file
+                        if (activePath == null || !file.absolutePath.contains(activePath)) {
+                            file.delete()
+                        }
+                    }
+                }
+
+                // 2. Cleanup stems folder
+                val stemsDir = java.io.File(cacheDir, "stems")
+                if (stemsDir.exists() && stemsDir.isDirectory) {
+                    stemsDir.listFiles()?.forEach { file ->
+                        if (activePath == null || !file.absolutePath.contains(activePath)) {
+                            file.delete()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
 
         handleIntent(intent)
@@ -313,13 +385,63 @@ class MainActivity : ComponentActivity() {
         val commandFilter = IntentFilter().apply {
             addAction("org.audiocular.peq.app.ACTION_SYSTEM_NEXT")
             addAction("org.audiocular.peq.app.ACTION_SYSTEM_PREV")
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_PLAY_INDEX")
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_SHUFFLE")
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_REPEAT")
+            addAction("org.audiocular.peq.app.ACTION_SYSTEM_FAVORITE")
         }
         mediaCommandReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (::viewModel.isInitialized) {
                     when (intent?.action) {
-                        "org.audiocular.peq.app.ACTION_SYSTEM_NEXT" -> viewModel.nextTrack()
-                        "org.audiocular.peq.app.ACTION_SYSTEM_PREV" -> viewModel.previousTrack()
+                        "org.audiocular.peq.app.ACTION_SYSTEM_NEXT" -> {
+                            viewModel.nextTrack()
+                        }
+                        "org.audiocular.peq.app.ACTION_SYSTEM_PREV" -> {
+                            viewModel.previousTrack()
+                        }
+                        "org.audiocular.peq.app.ACTION_SYSTEM_PLAY_INDEX" -> {
+                            val index = intent.getIntExtra("play_index", -1)
+                            if (index >= 0 && index < viewModel.playbackQueue.size) {
+                                viewModel.playMediaItemFromQueue(index)
+                            }
+                        }
+                        "org.audiocular.peq.app.ACTION_SYSTEM_SHUFFLE" -> {
+                            if (intent.hasExtra("shuffle_enabled")) {
+                                val enabled = intent.getBooleanExtra("shuffle_enabled", viewModel.isShuffleEnabled)
+                                viewModel.setShuffleEnabledState(enabled)
+                            } else {
+                                viewModel.toggleShuffle()
+                            }
+                        }
+                        "org.audiocular.peq.app.ACTION_SYSTEM_REPEAT" -> {
+                            if (intent.hasExtra("repeat_mode")) {
+                                val modeInt = intent.getIntExtra("repeat_mode", 0)
+                                val repeatMode = when (modeInt) {
+                                    1 -> org.audiocular.peq.app.data.RepeatMode.ONE
+                                    2 -> org.audiocular.peq.app.data.RepeatMode.ALL
+                                    else -> org.audiocular.peq.app.data.RepeatMode.OFF
+                                }
+                                viewModel.setRepeatModeState(repeatMode)
+                            } else {
+                                viewModel.cycleRepeatMode()
+                            }
+                        }
+                        "org.audiocular.peq.app.ACTION_SYSTEM_FAVORITE" -> {
+                            lifecycleScope.launch {
+                                val storedFavorites = org.audiocular.peq.app.data.getPersistenceManager().loadFavorites()
+                                viewModel.favoriteItems.clear()
+                                viewModel.favorites.clear()
+                                storedFavorites.forEach { p ->
+                                    viewModel.resolveItem(p)?.let { item ->
+                                        viewModel.favoriteItems.add(item)
+                                        viewModel.favorites.add(item.id)
+                                    }
+                                }
+                                viewModel.syncNowPlaying()
+                                viewModel.persistSession()
+                            }
+                        }
                     }
                 }
             }
@@ -445,45 +567,41 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> {
                 val uri = intent.data
                 if (uri != null) {
-                    val path = when (uri.scheme) {
-                        "file" -> uri.path
-                        "content" -> uri.toString()
-                        else -> uri.toString()
-                    }
-                    path?.let {
-                        var displayName: String? = null
-                        var sizeBytes: Long? = null
+                    val cacheFile = if (uri.scheme == "content") {
+                        getCacheFileForUri(uri)
+                    } else null
+                    
+                    val fileToUse = cacheFile ?: if (uri.scheme == "file") java.io.File(uri.path ?: "") else null
+                    val path = fileToUse?.absolutePath ?: uri.toString()
+                    
+                    path.let {
+                        var displayName = fileToUse?.name ?: uri.path?.substringAfterLast("/")
+                        var sizeBytes = fileToUse?.length() ?: 0L
                         var mimeType: String? = null
+                        if (fileToUse != null) {
+                            mimeType = java.net.URLConnection.guessContentTypeFromName(fileToUse.name)
+                        }
 
-                        if (uri.scheme == "content") {
-                            mimeType = contentResolver.getType(uri)
-                            try {
-                                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                                    if (cursor.moveToFirst()) {
-                                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                                        if (nameIndex != -1) {
-                                            displayName = cursor.getString(nameIndex)
-                                        }
-                                        val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                                        if (sizeIndex != -1) {
-                                            sizeBytes = cursor.getLong(sizeIndex)
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                println("pEQControl: [SYSTEM] Failed to query content URI metadata: ${e.message}")
+                        var title: String? = null
+                        var artist: String? = null
+                        var durationMs: Long? = null
+
+                        try {
+                            val retriever = android.media.MediaMetadataRetriever()
+                            if (fileToUse != null) {
+                                retriever.setDataSource(fileToUse.absolutePath)
+                            } else {
+                                retriever.setDataSource(it)
                             }
-                        } else if (uri.scheme == "file") {
-                            try {
-                                val file = java.io.File(uri.path ?: "")
-                                if (file.exists()) {
-                                    displayName = file.name
-                                    sizeBytes = file.length()
-                                    mimeType = java.net.URLConnection.guessContentTypeFromName(file.name)
-                                }
-                            } catch (e: Exception) {
-                                println("pEQControl: [SYSTEM] Failed to query file URI metadata: ${e.message}")
+                            title = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                            artist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                            val dur = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                            if (dur != null) {
+                                durationMs = dur.toLongOrNull()
                             }
+                            retriever.release()
+                        } catch (e: Exception) {
+                            println("pEQControl: [SYSTEM] Failed to query media metadata via retriever: ${e.message}")
                         }
 
                         lifecycleScope.launch {
@@ -492,7 +610,10 @@ class MainActivity : ComponentActivity() {
                                 path = it,
                                 displayName = displayName,
                                 mimeType = mimeType,
-                                sizeBytes = sizeBytes
+                                sizeBytes = sizeBytes,
+                                title = title,
+                                artist = artist,
+                                durationMs = durationMs
                             )
                         }
                     }
@@ -641,7 +762,9 @@ class MainActivity : ComponentActivity() {
             viewModel.isAppInBackground.value = true
             // Only show overlay if playing and lyrics are enabled
             if (viewModel.isPlaying.value && viewModel.isLyricsVisible.value) {
-                startService(Intent(this, org.audiocular.peq.app.services.pEQOverlayService::class.java))
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, org.audiocular.peq.app.services.pEQOverlayService::class.java))
+                }
             }
         }
         org.audiocular.peq.app.ui.components.releaseBrightness()
@@ -652,6 +775,18 @@ class MainActivity : ComponentActivity() {
         if (::viewModel.isInitialized) {
             viewModel.isAppInBackground.value = false
             stopService(Intent(this, org.audiocular.peq.app.services.pEQOverlayService::class.java))
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 1005 && resultCode == RESULT_OK) {
+            println("pEQControl: [SYSTEM] File deletion approved by user, refreshing library")
+            if (::viewModel.isInitialized) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    viewModel.scanner?.refresh()
+                }
+            }
         }
     }
 

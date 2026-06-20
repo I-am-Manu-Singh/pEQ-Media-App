@@ -46,6 +46,11 @@ class pEQOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun showOverlay() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
+
         val params = WindowManager.LayoutParams().apply {
             width = WindowManager.LayoutParams.WRAP_CONTENT
             height = WindowManager.LayoutParams.WRAP_CONTENT
@@ -99,7 +104,11 @@ class pEQOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                     
                                     params.x = offsetX.toInt()
                                     params.y = offsetY.toInt()
-                                    windowManager.updateViewLayout(this@apply, params)
+                                    try {
+                                        windowManager.updateViewLayout(this@apply, params)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
                                 }
                             }
                         )
@@ -108,8 +117,13 @@ class pEQOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         
-        windowManager.addView(overlayView, params)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        try {
+            windowManager.addView(overlayView, params)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {

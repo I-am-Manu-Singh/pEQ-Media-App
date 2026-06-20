@@ -29,6 +29,7 @@ fun pEQWorkstationDashboard(viewModel: AppViewModel = LocalAppViewModel.current)
         pEQTabs(
             tabs = tabs,
             selectedTab = selectedTab,
+            viewModel = viewModel,
             onTabSelected = { viewModel.dashboardSubTab.value = it }
         )
 

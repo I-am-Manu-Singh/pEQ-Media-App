@@ -35,6 +35,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.widgets.NeuralGlanceWidgetReceiver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.glance.appwidget.GlanceAppWidgetManager
+import org.audiocular.peq.app.widgets.NeuralGlanceWidget
+import org.audiocular.peq.app.ui.theme.pEQTheme
+import org.audiocular.peq.app.ui.theme.pEQTheme as AppThemeEnum
 
 class pEQWidgetConfigActivity : ComponentActivity() {
 
@@ -61,11 +72,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
         }
 
         setContent {
-
-            MaterialTheme(
-                colorScheme = darkColorScheme()
-            ) {
-
+            pEQTheme(theme = org.audiocular.peq.app.ui.theme.pEQTheme.SYSTEM) {
                 WidgetConfigScreen()
             }
         }
@@ -124,13 +131,37 @@ class pEQWidgetConfigActivity : ComponentActivity() {
             )
         }
 
+        var showRepeat by remember {
+            mutableStateOf(
+                prefs.getBoolean("show_repeat", true)
+            )
+        }
+
+        var showQueue by remember {
+            mutableStateOf(
+                prefs.getBoolean("show_queue", true)
+            )
+        }
+
+        var albumArtColorEnabled by remember {
+            mutableStateOf(
+                prefs.getBoolean("album_art_color_enabled", true)
+            )
+        }
+
         var glassIntensity by remember {
             mutableFloatStateOf(
                 prefs.getFloat("glass_intensity", 0.85f)
             )
         }
 
-        val yellow = Color(0xFFFFD54F)
+        var widgetTheme by remember {
+            mutableStateOf(
+                prefs.getString("widget_theme", "system") ?: "system"
+            )
+        }
+
+        val yellow = MaterialTheme.colorScheme.primary
 
         // =====================================================
         // ROOT
@@ -142,9 +173,8 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFF050505),
-                            Color(0xFF0C0C0C),
-                            Color(0xFF141414)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.background
                         )
                     )
                 )
@@ -190,9 +220,9 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 // =============================================
 
                 Text(
-                    text = "pEQ Widget",
+                    text = "pEQ Widget Configurator",
 
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
 
                     fontSize =
                         if (compactMode) 26.sp else 32.sp,
@@ -202,31 +232,22 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Text(
-                    text = "Adaptive neural playback interface",
-
-                    color = Color.White.copy(alpha = 0.58f),
-
-                    fontSize =
-                        if (compactMode) 12.sp else 14.sp
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
+          
 
                 // =============================================
                 // PREVIEW
                 // =============================================
 
-                WidgetPreviewCard(
-                    showTitle = showTitle,
-                    showArtist = showArtist,
-                    showArt = showArt,
-                    showFavorite = showFavorite,
-                    showShuffle = showShuffle,
-                    glassIntensity = glassIntensity
-                )
+                // WidgetPreviewCard(
+                //     showTitle = showTitle,
+                //     showArtist = showArtist,
+                //     showArt = showArt,
+                //     showFavorite = showFavorite,
+                //     showShuffle = showShuffle,
+                //     glassIntensity = glassIntensity
+                // )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                // Spacer(modifier = Modifier.height(24.dp))
 
                 // =============================================
                 // SETTINGS CARD
@@ -237,11 +258,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                     shape = RoundedCornerShape(30.dp),
 
-                    color = Color.White.copy(alpha = 0.04f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
 
                     border = BorderStroke(
                         1.dp,
-                        Color.White.copy(alpha = 0.08f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     )
                 ) {
 
@@ -254,7 +275,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                         Text(
                             text = "Widget Controls",
 
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
 
                             fontWeight = FontWeight.Bold,
 
@@ -262,42 +283,6 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
-
-                        ConfigToggleCard(
-                            title = "Track Title",
-                            subtitle = "Display current media title",
-                            icon = Icons.Default.Title,
-                            checked = showTitle,
-                            accent = yellow
-                        ) {
-                            showTitle = it
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        ConfigToggleCard(
-                            title = "Artist Name",
-                            subtitle = "Display artist metadata",
-                            icon = Icons.Default.Person,
-                            checked = showArtist,
-                            accent = yellow
-                        ) {
-                            showArtist = it
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        ConfigToggleCard(
-                            title = "Album Artwork",
-                            subtitle = "Enable artwork preview",
-                            icon = Icons.Default.Album,
-                            checked = showArt,
-                            accent = yellow
-                        ) {
-                            showArt = it
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
 
                         ConfigToggleCard(
                             title = "Favorite Button",
@@ -321,6 +306,93 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             showShuffle = it
                         }
 
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ConfigToggleCard(
+                            title = "Repeat Button",
+                            subtitle = "Enable repeat shortcut",
+                            icon = Icons.Default.Repeat,
+                            checked = showRepeat,
+                            accent = yellow
+                        ) {
+                            showRepeat = it
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ConfigToggleCard(
+                            title = "Queue Section",
+                            subtitle = "Show current queue list",
+                            icon = Icons.Default.QueueMusic,
+                            checked = showQueue,
+                            accent = yellow
+                        ) {
+                            showQueue = it
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ConfigToggleCard(
+                            title = "Album Art Color",
+                            subtitle = "Extract color from album art",
+                            icon = Icons.Default.ColorLens,
+                            checked = albumArtColorEnabled,
+                            accent = yellow
+                        ) {
+                            albumArtColorEnabled = it
+                        }
+
+                        Spacer(modifier = Modifier.height(26.dp))
+
+                        // =====================================
+                        // WIDGET THEME
+                        // =====================================
+
+                        Text(
+                            text = "Widget Theme",
+
+                            color = MaterialTheme.colorScheme.onSurface,
+
+                            fontWeight = FontWeight.Bold,
+
+                            fontSize = 14.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val themes = listOf("system" to "System", "dark" to "Dark", "light" to "Light")
+                            themes.forEach { (key, label) ->
+                                val selected = widgetTheme == key
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            if (selected) yellow else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                        )
+                                        .clickable { widgetTheme = key }
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (selected) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                            shape = RoundedCornerShape(14.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(26.dp))
 
                         // =====================================
@@ -338,7 +410,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                             Text(
                                 text = "Glass Intensity",
 
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
 
                                 fontWeight = FontWeight.Bold,
 
@@ -372,7 +444,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                                 thumbColor = yellow,
                                 activeTrackColor = yellow,
                                 inactiveTrackColor =
-                                    Color.White.copy(alpha = 0.08f)
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                             )
                         )
                     }
@@ -387,7 +459,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 Button(
                     onClick = {
 
-                        prefs.edit()
+                         prefs.edit()
                             .putBoolean(
                                 "show_title",
                                 showTitle
@@ -408,9 +480,25 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                                 "show_shuffle",
                                 showShuffle
                             )
+                            .putBoolean(
+                                "show_repeat",
+                                showRepeat
+                            )
+                            .putBoolean(
+                                "show_queue",
+                                showQueue
+                            )
+                            .putBoolean(
+                                "album_art_color_enabled",
+                                albumArtColorEnabled
+                            )
                             .putFloat(
                                 "glass_intensity",
                                 glassIntensity
+                            )
+                            .putString(
+                                "widget_theme",
+                                widgetTheme
                             )
                             .apply()
 
@@ -446,25 +534,49 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
                         context.sendBroadcast(updateIntent)
 
-                        // =====================================
-                        // RESULT
-                        // =====================================
-
-                        val resultIntent =
-                            Intent().apply {
-
-                                putExtra(
-                                    AppWidgetManager.EXTRA_APPWIDGET_ID,
-                                    appWidgetId
-                                )
+                        lifecycleScope.launch {
+                            try {
+                                val glanceManager = GlanceAppWidgetManager(context)
+                                val glanceId = glanceManager.getGlanceIdBy(appWidgetId)
+                                updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { glancePrefs ->
+                                    glancePrefs.toMutablePreferences().apply {
+                                        set(booleanPreferencesKey("show_title"), showTitle)
+                                        set(booleanPreferencesKey("show_artist"), showArtist)
+                                        set(booleanPreferencesKey("show_art"), showArt)
+                                        set(booleanPreferencesKey("show_favorite"), showFavorite)
+                                        set(booleanPreferencesKey("show_shuffle"), showShuffle)
+                                        set(booleanPreferencesKey("show_repeat"), showRepeat)
+                                        set(booleanPreferencesKey("show_queue"), showQueue)
+                                        set(booleanPreferencesKey("album_art_color_enabled"), albumArtColorEnabled)
+                                        set(floatPreferencesKey("glass_intensity"), glassIntensity)
+                                        set(stringPreferencesKey("widget_theme"), widgetTheme)
+                                    }
+                                }
+                                NeuralGlanceWidget().update(context, glanceId)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
 
-                        setResult(
-                            Activity.RESULT_OK,
-                            resultIntent
-                        )
+                            // =====================================
+                            // RESULT
+                            // =====================================
 
-                        finish()
+                            val resultIntent =
+                                Intent().apply {
+
+                                    putExtra(
+                                        AppWidgetManager.EXTRA_APPWIDGET_ID,
+                                        appWidgetId
+                                    )
+                                }
+
+                            setResult(
+                                Activity.RESULT_OK,
+                                resultIntent
+                            )
+
+                            finish()
+                        }
                     },
 
                     modifier = Modifier
@@ -865,7 +977,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                 if (checked) {
                     accent.copy(alpha = 0.10f)
                 } else {
-                    Color.White.copy(alpha = 0.03f)
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)
                 },
             label = "toggle_background"
         )
@@ -879,7 +991,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
 
             border = BorderStroke(
                 1.dp,
-                Color.White.copy(alpha = 0.06f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
             )
         ) {
 
@@ -924,7 +1036,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     Text(
                         text = title,
 
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
 
                         fontWeight = FontWeight.Bold,
 
@@ -936,7 +1048,7 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     Text(
                         text = subtitle,
 
-                        color = Color.White.copy(alpha = 0.55f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
 
                         fontSize = 12.sp,
 
@@ -954,11 +1066,11 @@ class pEQWidgetConfigActivity : ComponentActivity() {
                     onCheckedChange = onCheckedChange,
 
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.Black,
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                         checkedTrackColor = accent,
-                        uncheckedThumbColor = Color.White,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         uncheckedTrackColor =
-                            Color.White.copy(alpha = 0.15f)
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
                     )
                 )
             }

@@ -94,9 +94,7 @@ fun BottomNavigationBar(
     val tabs = listOf(
         Tab.Dashboard,
         Tab.Tuning,
-        Tab.Mixer,
-        Tab.Hardware,
-        Tab.Learn
+        Tab.Hardware
     )
 
     Surface(
@@ -134,9 +132,6 @@ fun BottomNavigationBar(
                         .weight(1f)
                         .clip(RoundedCornerShape(18.dp))
                         .clickable {
-
-                            // CLOSE DRUM SCREEN
-                            viewModel.showDrumLibrary.value = false
 
                             // CHANGE TAB
                             onSelect(tab)
@@ -226,8 +221,5 @@ private fun getTabIcon(tab: Tab): ImageVector = when(tab) {
     Tab.Dashboard -> Icons.Default.Dashboard
     Tab.Player -> Icons.Default.MusicNote
     Tab.Hardware -> Icons.Default.Memory
-    Tab.Mixer -> Icons.Default.Tune
     Tab.Tuning -> Icons.Default.GraphicEq
-    Tab.Learn -> Icons.Default.School
-    // Tab.DrumLibrary -> Icons.Default.MusicVideo
 }

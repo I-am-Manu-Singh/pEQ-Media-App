@@ -165,13 +165,6 @@ fun MediaItemCard(
                     Spacer(Modifier.width(8.dp))
                     MetadataBadge(text = if (item.type == MediaType.VIDEO) buildString { append(item.resolution ?: "VIDEO"); item.codec?.let { append(" • "); append(it) } } else buildString { append("${item.bitDepth}Bit"); if (item.sampleRate > 0) { append(" • "); append("${item.sampleRate / 1000}kHz") } })
                 }
-                AnimatedVisibility(visible = isActive) {
-                    Row(modifier = Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                        Spacer(Modifier.width(6.dp))
-                        Text(text = "NOW PLAYING", fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
             }
             Spacer(Modifier.width(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,9 +179,12 @@ fun MediaItemCard(
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f), modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(expanded = showMenuState, onDismissRequest = { showMenuState = false }) {
+                            DropdownMenuItem(text = { Text("Play Next") }, leadingIcon = { Icon(imageVector = Icons.Default.SkipNext, contentDescription = null) }, onClick = { viewModel.playNext(item); showMenuState = false })
                             DropdownMenuItem(text = { Text("Add to Queue") }, leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) }, onClick = { viewModel.addToQueue(item); showMenuState = false })
                             DropdownMenuItem(text = { Text("Add to Playlist") }, leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null) }, onClick = { viewModel.isPlaylistBulkAction.value = false; viewModel.selectedItemForPlaylist.value = item; viewModel.isPlaylistPickerShown.value = true; showMenuState = false })
-                            DropdownMenuItem(text = { Text("Neural Split") }, leadingIcon = { Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null) }, onClick = { viewModel.currentMediaItem.value = item; viewModel.startStemSplit(); showMenuState = false })
+                            DropdownMenuItem(text = { Text("Info") }, leadingIcon = { Icon(imageVector = Icons.Default.Info, contentDescription = null) }, onClick = { viewModel.selectedItemForInfo.value = item; viewModel.showTrackInfoSheet.value = true; showMenuState = false })
+                            DropdownMenuItem(text = { Text("Share") }, leadingIcon = { Icon(imageVector = Icons.Default.Share, contentDescription = null) }, onClick = { viewModel.shareItem(item); showMenuState = false })
+                            DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(imageVector = Icons.Default.Delete, contentDescription = null) }, onClick = { viewModel.deleteItem(item); showMenuState = false })
                         }
                     }
                 }
@@ -568,8 +564,8 @@ fun <T> MediaSelectionSheet(
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(modifier = Modifier.size(38.dp), strokeWidth = 3.dp)
                     Spacer(Modifier.height(24.dp))
-                    Text(text = "NEURAL SEARCH ACTIVE", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                    Text(text = "Establishing connection to metadata archive...", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = "Searching...", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    
                 }
             } else if (items.isEmpty()) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -15,9 +15,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import org.audiocular.peq.app.LocalAppViewModel
 import org.audiocular.peq.app.audio.DesktopAudioEngine
-
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.asComposeImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.geometry.Size
+import kotlin.math.roundToInt
+
 @Composable
 actual fun VideoSurface(
     modifier: Modifier,
@@ -26,6 +31,7 @@ actual fun VideoSurface(
     val viewModel = LocalAppViewModel.current
     val engine = viewModel.audioEngine as? DesktopAudioEngine ?: return
     val bitmap by engine.videoBitmap
+    val frameCount by engine.videoFrameCounter
     
     Box(
         modifier = modifier
@@ -35,11 +41,29 @@ actual fun VideoSurface(
     ) {
         if (bitmap != null) {
             Canvas(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = viewModel.videoRotationDegrees.value.toFloat()
+                    }
             ) {
-                bitmap?.let {
-                    // Render the raw VLC decoded bitmap directly inside Skia
-                    drawImage(it.asComposeImageBitmap())
+                bitmap?.let { bmp ->
+                    val imageBitmap = bmp.asComposeImageBitmap()
+                    val srcSize = Size(imageBitmap.width.toFloat(), imageBitmap.height.toFloat())
+                    val dstSize = size
+                    val scaleFactor = contentScale.computeScaleFactor(srcSize, dstSize)
+                    
+                    val scaledWidth = srcSize.width * scaleFactor.scaleX
+                    val scaledHeight = srcSize.height * scaleFactor.scaleY
+                    
+                    val xOffset = (dstSize.width - scaledWidth) / 2
+                    val yOffset = (dstSize.height - scaledHeight) / 2
+                    
+                    drawImage(
+                        image = imageBitmap,
+                        dstOffset = IntOffset(xOffset.roundToInt(), yOffset.roundToInt()),
+                        dstSize = IntSize(scaledWidth.roundToInt(), scaledHeight.roundToInt())
+                    )
                 }
             }
         } else {

@@ -170,6 +170,14 @@ val client = createHttpClient()
             audioEngine.setShuffleMode(value)
         }
 
+    fun setShuffleEnabledState(enabled: Boolean) {
+        _isShuffleEnabled.value = enabled
+    }
+
+    fun setRepeatModeState(mode: RepeatMode) {
+        repeatMode.value = mode
+    }
+
     val isFavorite = mutableStateOf(false)
     val repeatMode = mutableStateOf(RepeatMode.OFF)
 
@@ -312,6 +320,8 @@ val client = createHttpClient()
     private var lastFftTime = 0L
 
     fun start() {
+        if (hasInitialized) return
+        hasInitialized = true
         startHardwarePolling()
         restoreSession()
         
@@ -320,30 +330,56 @@ val client = createHttpClient()
             while (true) {
                 kotlinx.coroutines.delay(100)
                 val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                if (isPlaying.value && (now - lastFftTime > 200)) {
-                    scope.launch(Dispatchers.Main) {
-                        val currentId = currentMediaItem.value?.id ?: ""
-                        val idHash = currentId.hashCode()
-                        
-                        // Generate mock FFT data
-                        val mockFft = FloatArray(32) { i ->
-                            val base = 0.15f
-                            val noise = (kotlin.math.sin((now + i * 150) / 400.0).toFloat() * 0.12f) + 0.12f
-                            (base + noise).coerceIn(0f, 1f)
-                        }
-                        rtaData.value = mockFft
-                        val peak = mockFft.maxOrNull() ?: 0f
-                        peakLevelDb.value = (20 * kotlin.math.log10(peak.toDouble().coerceAtLeast(1e-6))).toFloat()
-                        preDspLevel.value = peak
+                val isEnginePlaying = isPlaying.value
+                
+                if (isEnginePlaying) {
+                    if (now - lastFftTime > 200) {
+                        scope.launch(Dispatchers.Main) {
+                            val currentId = currentMediaItem.value?.id ?: ""
+                            val idHash = currentId.hashCode()
+                            
+                            // Generate mock FFT data only when playing and FFT callbacks are absent
+                            val mockFft = FloatArray(32) { i ->
+                                val base = 0.15f
+                                val noise = (kotlin.math.sin((now + i * 150) / 400.0).toFloat() * 0.12f) + 0.12f
+                                (base + noise).coerceIn(0f, 1f)
+                            }
+                            rtaData.value = mockFft
+                            val peak = mockFft.maxOrNull() ?: 0f
+                            peakLevelDb.value = (20 * kotlin.math.log10(peak.toDouble().coerceAtLeast(1e-6))).toFloat()
+                            preDspLevel.value = peak
 
-                        val mockFreq = 440f + (kotlin.math.sin(now / 1000.0) * 10f).toFloat()
-                        detectedPitch.value = mockFreq
-                        val noteIdx = (12 * (kotlin.math.log2(mockFreq / 440.0) + 4.0)).toInt() % 12
-                        val notes = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-                        val note = notes[noteIdx.coerceIn(0, 11)]
-                        detectedNote.value = note
-                        val chordSuffix = if (idHash % 2 == 0) "" else "m"
-                        detectedChord.value = "$note$chordSuffix"
+                            val mockFreq = 440f + (kotlin.math.sin(now / 1000.0) * 10f).toFloat()
+                            detectedPitch.value = mockFreq
+                            val noteIdx = (12 * (kotlin.math.log2(mockFreq / 440.0) + 4.0)).toInt() % 12
+                            val notes = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+                            val note = notes[noteIdx.coerceIn(0, 11)]
+                            detectedNote.value = note
+                            val chordSuffix = if (idHash % 2 == 0) "" else "m"
+                            detectedChord.value = "$note$chordSuffix"
+                        }
+                    }
+                } else {
+                    // Decay/Zero-out RTA data and Telemetry on pause/stop
+                    scope.launch(Dispatchers.Main) {
+                        val hasValues = rtaData.value.any { it > 0.0f }
+                        if (hasValues) {
+                            val decayedFft = FloatArray(rtaData.value.size) { i ->
+                                (rtaData.value[i] * 0.6f).let { if (it < 0.005f) 0f else it }
+                            }
+                            rtaData.value = decayedFft
+                            val peak = decayedFft.maxOrNull() ?: 0f
+                            if (peak > 0f) {
+                                peakLevelDb.value = (20 * kotlin.math.log10(peak.toDouble().coerceAtLeast(1e-6))).toFloat()
+                                preDspLevel.value = peak
+                            } else {
+                                peakLevelDb.value = -60f
+                                preDspLevel.value = 0f
+                                detectedPitch.value = 0f
+                                detectedNote.value = ""
+                                detectedChord.value = ""
+                            }
+                        }
                     }
                 }
             }
@@ -424,6 +460,7 @@ val client = createHttpClient()
         }
         
         audioEngine.onTrackChanged = {
+            syncFromEngineTrack()
             onTrackLoaded()
         }
 
@@ -437,13 +474,18 @@ val client = createHttpClient()
                 val actualPlaying = audioEngine.isPlaying()
                 if (isPlaying.value != actualPlaying) {
                     isPlaying.value = actualPlaying
+                    syncNowPlaying()
                 }
                 
-                if (actualPlaying) {
-                    val pos = audioEngine.getCurrentPosition()
+                val pos = audioEngine.getCurrentPosition()
+                val rawDuration = audioEngine.getDuration()
+                if (!isSeeking.value) {
                     currentPosition.longValue = pos
-                    currentDuration.value = audioEngine.getDuration().coerceAtLeast(1L)
-                    
+                    val validDuration = if (rawDuration > 0 && rawDuration != -9223372036854775807L) rawDuration else 1L
+                    currentDuration.value = validDuration
+                }
+                
+                if (actualPlaying && !isSeeking.value) {
                     // 💓 Neural Heartbeat: Jitter data slightly for "Live" feel if hardware is idle
                     if (detectedPitch.value == 440f || detectedPitch.value == 0f) {
                          detectedPitch.value = 440f + (sin(Clock.System.now().toEpochMilliseconds() / 500.0) * 2f).toFloat()
@@ -456,7 +498,7 @@ val client = createHttpClient()
                         }
                     }
                 }
-                delay(200)
+                delay(100)
             }
         }
         
@@ -606,6 +648,8 @@ val client = createHttpClient()
     val isMasterBypassActive = mutableStateOf(false)
     val showDiagnostics = mutableStateOf(false)
     val showTrackInfoSheet = mutableStateOf(false)
+    val selectedItemForInfo = mutableStateOf<pEQMediaItem?>(null)
+    val isEditingMetadata = mutableStateOf(false)
     val connectedDevices = mutableStateListOf<Device>(Device.INTERNAL, Device.HI_RES_DAC) 
     val currentBluetoothProfile = mutableStateOf(org.audiocular.peq.app.audio.BluetoothProfile.LDAC)
     val bluetoothResumeEnabled = mutableStateOf(true)
@@ -674,6 +718,8 @@ val client = createHttpClient()
     val isRotationLocked = mutableStateOf(false)
     val youtubeSearchQuery = mutableStateOf("")
     val youtubeSearchResults = mutableStateListOf<YoutubeResult>()
+    val availableFormats = mutableStateListOf<org.audiocular.peq.app.ai.FormatInfo>()
+    val isFetchingFormats = mutableStateOf(false)
     val sharedUrl = mutableStateOf("")
     val scanProgress = mutableStateOf(0f)
     val scanStatus = mutableStateOf("")
@@ -751,8 +797,7 @@ val client = createHttpClient()
             }
         }
     }
-    val showDrumLibrary = mutableStateOf(false)
-
+    
     internal fun enqueueJob(job: SplitJob) {
         backgroundJobs.add(job)
         activeJob.value = job
@@ -785,18 +830,66 @@ val client = createHttpClient()
         }
         
         observeScanner()
-        observeMetronome()
         
         // 🚀 Automatic Metadata & Lyric Fetching
         scope.launch {
-            snapshotFlow { currentMediaItem.value?.path }.distinctUntilChanged().collect { path ->
-                if (path != null) {
+            snapshotFlow { currentMediaItem.value }.distinctUntilChanged().collect { item ->
+                if (item != null) {
                     onTrackLoaded()
+                    syncNowPlaying()
                 }
             }
         }
 
+        // 🔄 Sync Playback State to Widget Immediately
+        scope.launch {
+            snapshotFlow { isPlaying.value }.distinctUntilChanged().collect {
+                syncNowPlaying()
+            }
+        }
+
+        // 🔄 Sync Shuffle & Repeat State to Widget Immediately
+        scope.launch {
+            snapshotFlow { isShuffleEnabled }.distinctUntilChanged().collect { isShuffle ->
+                persistenceManager.updatePlaybackState(isShuffle, repeatMode.value.name)
+            }
+        }
+        scope.launch {
+            snapshotFlow { repeatMode.value }.distinctUntilChanged().collect { mode ->
+                persistenceManager.updatePlaybackState(isShuffleEnabled, mode.name)
+            }
+        }
+        scope.launch {
+            snapshotFlow {
+                val currentPath = currentMediaItem.value?.path
+                if (currentPath != null) {
+                    favoriteItems.any { it.path == currentPath }
+                } else {
+                    false
+                }
+            }.distinctUntilChanged().collect {
+                syncNowPlaying()
+            }
+        }
+
         start()
+    }
+
+    fun syncFromEngineTrack() {
+        val currentUri = audioEngine.getCurrentTrackUri() ?: return
+        val normalizedCurrent = normalizePath(currentUri)
+        val matchedIndex = playbackQueue.indexOfFirst { item ->
+            normalizePath(item.path) == normalizedCurrent
+        }
+        if (matchedIndex != -1) {
+            val matchedItem = playbackQueue[matchedIndex]
+            if (currentQueueIndex.value != matchedIndex) {
+                setCurrentQueueIndex(matchedIndex)
+            }
+            if (currentMediaItem.value?.path != matchedItem.path) {
+                currentMediaItem.value = matchedItem
+            }
+        }
     }
 }
 

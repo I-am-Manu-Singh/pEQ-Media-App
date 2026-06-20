@@ -159,7 +159,7 @@ private fun MostPlayedSection(viewModel: AppViewModel) {
                 items(filteredItems) { item ->
                     SquareMediaCard(
                         item = item,
-                        onClick = { viewModel.playMediaItem(item) }
+                        onClick = { viewModel.playMediaItem(item, fromHomeScreen = true) }
                     )
                 }
             }

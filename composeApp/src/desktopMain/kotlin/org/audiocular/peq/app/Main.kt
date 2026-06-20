@@ -76,25 +76,31 @@ fun main(args: Array<String>) {
          * VIEWMODEL
          */
         val viewModel = remember {
-
             AppViewModel(
-
                 audioEngine = audioEngine,
-
-                persistenceManager =
-                    DesktopPersistenceManager(),
-
+                persistenceManager = DesktopPersistenceManager(),
                 stemSplitter = org.audiocular.peq.app.ai.DesktoppEQStemSplitter(),
-
                 cloudDownloader = null
-
             ).apply {
-
-                scanner =
-                    DesktopFileScanner()
-
-                platformStorageBase.value =
-                    System.getProperty("user.home")
+                scanner = DesktopFileScanner()
+                platformStorageBase.value = System.getProperty("user.home")
+                
+                // Dynamic macOS Open File Handler
+                if (isMacOs) {
+                    try {
+                        if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.APP_OPEN_FILE)) {
+                            java.awt.Desktop.getDesktop().setOpenFileHandler { event ->
+                                val files = event.files
+                                if (!files.isNullOrEmpty()) {
+                                    val path = files[0].absolutePath
+                                    playExternalFile(path)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        println("pEQControl: [macOS] Failed to register OpenFilesHandler: ${e.message}")
+                    }
+                }
 
                 /*
                  * FOLDER PICKER

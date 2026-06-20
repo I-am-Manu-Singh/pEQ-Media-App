@@ -28,6 +28,7 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.ImageInfo
+import sun.misc.Unsafe
 
 /**
  * INDUSTRIAL DESKTOP AUDIO ENGINE: pEQ CORE (macOS Optimized)
@@ -39,24 +40,29 @@ class DesktopAudioEngine : AudioEngine {
     private var latestSpectrumData = FloatArray(32) { 0f }
     private var equalizer: Equalizer? = null
         
+    private val unsafe: Unsafe by lazy {
+        val field = Unsafe::class.java.getDeclaredField("theUnsafe")
+        field.isAccessible = true
+        field.get(null) as Unsafe
+    }
+
     // High-performance video state
     private val drumClips = mutableMapOf<String, Clip>()
     private val chordList = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     val videoBitmap = mutableStateOf<Bitmap?>(null)
-    private var buffer: IntArray? = null
+    val videoFrameCounter = mutableStateOf(0L)
     private var width = 0
     private var height = 0
-    private var pixelBufferA: ByteArray? = null
-    private var pixelBufferB: ByteArray? = null
     private var skiaBitmapA = Bitmap()
     private var skiaBitmapB = Bitmap()
     private var useBufferA = true
     private var isRenderingFrame = false
     private var lastFrameTime = 0L
-    private var renderJob: Job? = null
+    private var activeSubtitleTrackId = -1
+    private var subtitlesEnabled = false
 
     private val factory = MediaPlayerFactory(
-        "--avcodec-hw=any",
+        "--avcodec-hw=none",
         "--drop-late-frames",
         "--skip-frames",
         "--file-caching=300",
@@ -67,7 +73,6 @@ class DesktopAudioEngine : AudioEngine {
         "--avcodec-threads=4",
         "--no-video-title-show",
         "--no-stats",
-        "--no-osd",
         "--quiet"
     )
 
@@ -127,8 +132,8 @@ class DesktopAudioEngine : AudioEngine {
     private fun setupVideoSurface() {
         val bufferFormatCallback = object : BufferFormatCallback {
             override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
-                // Adaptive scaling: Cap at 1080p for UI responsiveness
-                val maxDim = 1920
+                // Support up to 4K resolution (3840x2160)
+                val maxDim = 3840
                 if (sourceWidth > maxDim || sourceHeight > maxDim) {
                     val ratio = sourceWidth.toFloat() / sourceHeight.toFloat()
                     if (ratio > 1f) {
@@ -146,7 +151,7 @@ class DesktopAudioEngine : AudioEngine {
                 // Align width to 16 bytes for hardware stride compatibility
                 width = (width + 15) and 0xFFFFFFF0.toInt()
                 
-                println("pEQControl: [VLC] Surface Optimized -> ${width}x${height}")
+                println("pEQControl: [VLC] Video Surface Dimensions: ${width}x${height}")
                 return RV32BufferFormat(width, height)
             }
             override fun allocatedBuffers(buffers: Array<out ByteBuffer>?) {}
@@ -160,9 +165,6 @@ class DesktopAudioEngine : AudioEngine {
             ) {
                 if (width <= 0 || height <= 0) return
                 if (isRenderingFrame) return
-                
-                val now = System.currentTimeMillis()
-                if (now - lastFrameTime < 16L) return // Target 60 FPS
 
                 val byteBuffer = nativeBuffers?.getOrNull(0) ?: return
                 val byteSize = width * height * 4
@@ -170,39 +172,40 @@ class DesktopAudioEngine : AudioEngine {
                 try {
                     isRenderingFrame = true
                     
-                    // Initialize or resize buffers only when needed
-                    val byteSize = width * height * 4
-                    if (pixelBufferA == null || pixelBufferA!!.size != byteSize) {
-                        // Close old bitmaps to prevent native memory leaks
+                    if (skiaBitmapA.width != width || skiaBitmapA.height != height) {
                         skiaBitmapA.close()
                         skiaBitmapB.close()
                         
-                        pixelBufferA = ByteArray(byteSize)
-                        pixelBufferB = ByteArray(byteSize)
+                        skiaBitmapA = Bitmap()
+                        skiaBitmapB = Bitmap()
                         
-                        skiaBitmapA = Bitmap().apply { allocPixels(ImageInfo(width, height, ColorType.BGRA_8888, ColorAlphaType.PREMUL)) }
-                        skiaBitmapB = Bitmap().apply { allocPixels(ImageInfo(width, height, ColorType.BGRA_8888, ColorAlphaType.PREMUL)) }
-                        
-                        println("pEQControl: [VLC] Surface Recalibrated -> ${width}x${height}")
+                        val imageInfo = ImageInfo(width, height, ColorType.BGRA_8888, ColorAlphaType.PREMUL)
+                        skiaBitmapA.allocPixels(imageInfo)
+                        skiaBitmapB.allocPixels(imageInfo)
+                        println("pEQControl: [VLC] Direct Skia Bitmaps allocated for ${width}x${height}")
                     }
 
-                    // Selection and immediate update to avoid coroutine overhead
                     val targetBitmap = if (useBufferA) skiaBitmapA else skiaBitmapB
-                    val targetBuffer = if (useBufferA) pixelBufferA else pixelBufferB
-                    
-                    // Fast Native -> JVM transfer
-                    byteBuffer.get(targetBuffer!!)
-                    byteBuffer.rewind()
-                    
-                    // Direct installation into Skia surface
-                    targetBitmap.installPixels(targetBuffer)
-
-                    // Update the state with the same bitmap object to avoid allocation
-                    videoBitmap.value = targetBitmap
-                    
-                    useBufferA = !useBufferA
-                    lastFrameTime = now
-                } catch (e: Exception) {
+                    val destAddr = targetBitmap.peekPixels()?.getAddr(0, 0) ?: 0L
+                    if (destAddr != 0L) {
+                        val pointer = com.sun.jna.Native.getDirectBufferPointer(byteBuffer)
+                        val srcAddr = com.sun.jna.Pointer.nativeValue(pointer)
+                        if (srcAddr != 0L) {
+                            val remainingBytes = byteBuffer.remaining().toLong()
+                            val targetCapacity = (targetBitmap.rowBytes * targetBitmap.height).toLong()
+                            val copySize = minOf(byteSize.toLong(), remainingBytes, targetCapacity)
+                            if (copySize > 0) {
+                                unsafe.copyMemory(srcAddr, destAddr, copySize)
+                                targetBitmap.notifyPixelsChanged()
+                                
+                                // Thread-safe update of Compose State
+                                videoBitmap.value = targetBitmap
+                                videoFrameCounter.value++
+                                useBufferA = !useBufferA
+                            }
+                        }
+                    }
+                } catch (e: java.lang.Exception) {
                     println("pEQControl: [VLC] Rendering Pipeline Error -> ${e.message}")
                 } finally {
                     isRenderingFrame = false
@@ -219,6 +222,33 @@ class DesktopAudioEngine : AudioEngine {
                 isPlayingState.value = true
                 mediaPlayer?.audio()?.setVolume((volume * 100).toInt())
                 println("pEQControl: [VLC] Playing")
+                uiScope.launch {
+                    if (subtitlesEnabled) {
+                        var applied = false
+                        var attempts = 0
+                        while (!applied && attempts < 10) {
+                            delay(500)
+                            if (activeSubtitleTrackId != -1) {
+                                mediaPlayer?.subpictures()?.setTrack(activeSubtitleTrackId)
+                                val currentTrack = mediaPlayer?.subpictures()?.track()
+                                if (currentTrack == activeSubtitleTrackId) {
+                                    applied = true
+                                    println("pEQControl: [VLC] Successfully applied activeSubtitleTrackId ($activeSubtitleTrackId)")
+                                }
+                            } else {
+                                val tracks = mediaPlayer?.subpictures()?.trackDescriptions()
+                                val firstValid = tracks?.firstOrNull { it.id() != -1 }
+                                if (firstValid != null) {
+                                    activeSubtitleTrackId = firstValid.id()
+                                    mediaPlayer?.subpictures()?.setTrack(activeSubtitleTrackId)
+                                    applied = true
+                                    println("pEQControl: [VLC] Successfully applied first valid subtitle track (${firstValid.id()})")
+                                }
+                            }
+                            attempts++
+                        }
+                    }
+                }
             }
             override fun paused(mediaPlayer: uk.co.caprica.vlcj.player.base.MediaPlayer?) {
                 isPlayingState.value = false
@@ -228,7 +258,9 @@ class DesktopAudioEngine : AudioEngine {
             }
             override fun finished(mediaPlayer: uk.co.caprica.vlcj.player.base.MediaPlayer?) {
                 isPlayingState.value = false
-                onTrackEnded?.invoke()
+                uiScope.launch(Dispatchers.Main) {
+                    onTrackEnded?.invoke()
+                }
             }
             override fun error(mediaPlayer: uk.co.caprica.vlcj.player.base.MediaPlayer?) {
                 isPlayingState.value = false
@@ -274,9 +306,19 @@ class DesktopAudioEngine : AudioEngine {
 
     override fun initialize(audioSessionId: Int) = Unit
 
+    private fun isVideoUrl(url: String?): Boolean {
+        if (url == null) return false
+        val clean = url.lowercase()
+        return clean.endsWith(".mp4") || clean.endsWith(".mkv") || clean.endsWith(".mov") || 
+               clean.endsWith(".avi") || clean.endsWith(".webm") || clean.endsWith(".3gp")
+    }
+
     override fun playTrack(url: String, title: String?, artist: String?, thumbnail: String?) {
         currentUrl = url
-        if (Bass.isLoaded && Bass.lib != null) {
+        val isVideo = isVideoUrl(url)
+        
+        if (!isVideo && Bass.isLoaded && Bass.lib != null) {
+            mediaPlayer.controls().stop()
             try {
                 if (bassHandle != 0) {
                     Bass.lib?.BASS_ChannelStop(bassHandle)
@@ -294,6 +336,12 @@ class DesktopAudioEngine : AudioEngine {
                 println("pEQControl: [BASS] Playback failed: ${e.message}")
             }
         }
+        
+        if (Bass.isLoaded && bassHandle != 0) {
+            Bass.lib?.BASS_ChannelStop(bassHandle)
+            bassHandle = 0
+        }
+        
         val mediaPath = if (url.startsWith("http")) url else File(url.replace("file://", "")).absolutePath
         mediaPlayer.media().play(mediaPath)
         mediaPlayer.audio().setVolume((volume * 100).toInt())
@@ -383,9 +431,9 @@ class DesktopAudioEngine : AudioEngine {
         if (Bass.isLoaded && bassHandle != 0) {
             val bytes = Bass.lib?.BASS_ChannelSeconds2Bytes(bassHandle, positionMs / 1000.0) ?: 0L
             Bass.lib?.BASS_ChannelSetPosition(bassHandle, bytes, 0)
-            return
+        } else {
+            mediaPlayer.controls().setTime(positionMs)
         }
-        mediaPlayer.controls().setTime(positionMs)
     }
 
     override fun seekRelative(deltaMs: Long) {
@@ -464,7 +512,11 @@ class DesktopAudioEngine : AudioEngine {
         val id = track?.id?.toIntOrNull() ?: -1
         when (track?.type) {
             TrackType.AUDIO -> mediaPlayer.audio().setTrack(id)
-            TrackType.SUBTITLE -> mediaPlayer.subpictures().setTrack(id)
+            TrackType.SUBTITLE -> {
+                activeSubtitleTrackId = id
+                mediaPlayer.subpictures().setTrack(id)
+                println("pEQControl: [VLC] Switch subtitle track to $id")
+            }
             else -> {}
         }
     }
@@ -528,6 +580,9 @@ class DesktopAudioEngine : AudioEngine {
     override fun setDeepBassLevel(level: Float) = Unit
 
     override fun getDuration(): Long {
+        if (isVideoUrl(currentUrl)) {
+            return mediaPlayer.status().length()
+        }
         if (Bass.isLoaded && bassHandle != 0) {
             val bytes = Bass.lib?.BASS_ChannelGetPosition(bassHandle, 2) ?: 0L // 2 = BASS_POS_BYTE
             val seconds = Bass.lib?.BASS_ChannelBytes2Seconds(bassHandle, bytes) ?: 0.0
@@ -536,6 +591,9 @@ class DesktopAudioEngine : AudioEngine {
         return mediaPlayer.status().length()
     }
     override fun getCurrentPosition(): Long {
+        if (isVideoUrl(currentUrl)) {
+            return mediaPlayer.status().time()
+        }
         if (Bass.isLoaded && bassHandle != 0) {
             val bytes = Bass.lib?.BASS_ChannelGetPosition(bassHandle, 0) ?: 0L // 0 = BASS_POS_BYTE
             val seconds = Bass.lib?.BASS_ChannelBytes2Seconds(bassHandle, bytes) ?: 0.0
@@ -582,10 +640,54 @@ class DesktopAudioEngine : AudioEngine {
     override fun getVideoWidth(): Int = width
     override fun getVideoHeight(): Int = height
 
-    override suspend fun saveEmbeddedLyrics(url: String, lyrics: List<SyncedLine>) = Unit
+    private fun formatTimeLrc(ms: Long): String {
+        val totalSec = ms / 1000
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        val mills = (ms % 1000) / 10
+        return "${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${mills.toString().padStart(2, '0')}"
+    }
+
+    override suspend fun saveEmbeddedLyrics(url: String, lyrics: List<SyncedLine>) {
+        withContext(Dispatchers.IO) {
+            val lyricsText = lyrics.joinToString("\n") { 
+                if (it.timestampMs > 0L) "[${formatTimeLrc(it.timestampMs)}] ${it.text}" else it.text 
+            }
+            try {
+                val file = java.io.File(url)
+                if (file.exists()) {
+                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                    var tag = audioFile.tag
+                    if (tag == null) {
+                        tag = audioFile.createDefaultTag()
+                        audioFile.tag = tag
+                    }
+                    tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyricsText)
+                    audioFile.commit()
+                    println("pEQControl: [Desktop] Embedded lyrics successfully saved to file via jaudiotagger: $url")
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [Desktop] Failed to embed lyrics in file: ${e.message}")
+            }
+            saveSidecarFile(url, "lrc", lyricsText)
+        }
+    }
     override suspend fun saveEmbeddedChapters(url: String, chapters: List<MediaChapter>) = Unit
     override suspend fun saveEmbeddedSubtitles(url: String, subtitles: List<SyncedLine>) = Unit
-    override suspend fun saveSidecarFile(mediaPath: String, extension: String, content: String) = Unit
+    override suspend fun saveSidecarFile(mediaPath: String, extension: String, content: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val file = java.io.File(mediaPath)
+                if (file.exists()) {
+                    val sidecar = java.io.File(file.parent, "${file.nameWithoutExtension}.$extension")
+                    sidecar.writeText(content)
+                    println("pEQControl: [Desktop] Sidecar file saved: ${sidecar.absolutePath}")
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [Desktop] Failed to save sidecar file: ${e.message}")
+            }
+        }
+    }
     override fun playDrumSample(label: String, index: Int) {
         executor.execute {
             try {
@@ -660,8 +762,42 @@ class DesktopAudioEngine : AudioEngine {
             }
         }
     }
-    override fun addExternalSubtitle(path: String) = Unit
-    override fun setSubtitlesEnabled(enabled: Boolean) = Unit
+    override fun addExternalSubtitle(path: String) {
+        mediaPlayer.subpictures().setSubTitleFile(path)
+        subtitlesEnabled = true
+        uiScope.launch {
+            delay(500)
+            val tracks = mediaPlayer.subpictures().trackDescriptions()
+            val firstValid = tracks?.firstOrNull { it.id() != -1 }
+            if (firstValid != null) {
+                activeSubtitleTrackId = firstValid.id()
+                mediaPlayer.subpictures().setTrack(activeSubtitleTrackId)
+            }
+        }
+        println("pEQControl: [VLC] Set external subtitle file: $path")
+    }
+    override fun setSubtitlesEnabled(enabled: Boolean) {
+        subtitlesEnabled = enabled
+        if (enabled) {
+            if (activeSubtitleTrackId != -1) {
+                mediaPlayer.subpictures().setTrack(activeSubtitleTrackId)
+            } else {
+                val tracks = mediaPlayer.subpictures().trackDescriptions()
+                val firstValid = tracks?.firstOrNull { it.id() != -1 }
+                if (firstValid != null) {
+                    activeSubtitleTrackId = firstValid.id()
+                    mediaPlayer.subpictures().setTrack(activeSubtitleTrackId)
+                }
+            }
+        } else {
+            val currentTrack = mediaPlayer.subpictures().track()
+            if (currentTrack != -1 && currentTrack != -1) {
+                activeSubtitleTrackId = currentTrack
+            }
+            mediaPlayer.subpictures().setTrack(-1)
+        }
+        println("pEQControl: [VLC] setSubtitlesEnabled($enabled), activeTrack=$activeSubtitleTrackId")
+    }
     
     override fun togglePlayback() {
         if (isPlaying()) pause() else resume()

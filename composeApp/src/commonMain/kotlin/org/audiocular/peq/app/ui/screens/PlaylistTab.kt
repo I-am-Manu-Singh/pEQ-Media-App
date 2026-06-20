@@ -35,25 +35,22 @@ fun PlaylistManagerTab(viewModel: AppViewModel) {
         )
     } else {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            SectionHeader("USER COLLECTIONS")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SectionHeader("USER COLLECTIONS")
+                IconButton(onClick = { showCreateDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Create New Collection", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
             Spacer(Modifier.height(18.dp))
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                // NEW COLLECTION CARD
-                item {
-                    pEQItemCard(
-                        title = "CREATE NEW COLLECTION",
-                        subtitle = "Organize your neural assets",
-                        icon = Icons.Default.PlaylistAdd,
-                        onClick = { showCreateDialog = true },
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    )
-                }
-
                 // SPECIAL: FAVORITES CARD
                 item {
                     pEQItemCard(
@@ -65,11 +62,7 @@ fun PlaylistManagerTab(viewModel: AppViewModel) {
                     )
                 }
 
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    SectionHeader("YOUR COLLECTIONS")
-                    Spacer(Modifier.height(4.dp))
-                }
+        
 
                 if (viewModel.customPlaylists.isEmpty()) {
                     item {
@@ -81,32 +74,45 @@ fun PlaylistManagerTab(viewModel: AppViewModel) {
                             }
                         }
                     }
-                }
+                } else {
+                    val playlistPairs = viewModel.customPlaylists.toList().chunked(2)
+                    items(playlistPairs) { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            pair.forEach { (name, list) ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    var showDeleteConfirm by remember { mutableStateOf(false) }
+                                    pEQItemCard(
+                                        title = name.uppercase(),
+                                        subtitle = "${list.size} tracks",
+                                        icon = Icons.AutoMirrored.Filled.QueueMusic,
+                                        onClick = { selectedPlaylist = name },
+                                        onLongClick = { showDeleteConfirm = true }
+                                    )
 
-                items(viewModel.customPlaylists.toList()) { (name, list) ->
-                    var showDeleteConfirm by remember { mutableStateOf(false) }
-                    pEQItemCard(
-                        title = name.uppercase(),
-                        subtitle = "${list.size} tracks",
-                        icon = Icons.AutoMirrored.Filled.QueueMusic,
-                        onClick = { selectedPlaylist = name },
-                        onLongClick = { showDeleteConfirm = true }
-                    )
-
-                    if (showDeleteConfirm) {
-                        AlertDialog(
-                            onDismissRequest = { showDeleteConfirm = false },
-                            title = { Text("Delete Collection", fontWeight = FontWeight.Black) },
-                            text = { Text("Are you sure you want to permanently delete '$name'?") },
-                            confirmButton = {
-                                TextButton(onClick = { viewModel.deletePlaylist(name); showDeleteConfirm = false }) {
-                                    Text("DELETE", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                    if (showDeleteConfirm) {
+                                        AlertDialog(
+                                            onDismissRequest = { showDeleteConfirm = false },
+                                            title = { Text("Delete Collection", fontWeight = FontWeight.Black) },
+                                            text = { Text("Are you sure you want to permanently delete '$name'?") },
+                                            confirmButton = {
+                                                TextButton(onClick = { viewModel.deletePlaylist(name); showDeleteConfirm = false }) {
+                                                    Text("DELETE", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                                }
+                                            },
+                                            dismissButton = {
+                                                TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL") }
+                                            }
+                                        )
+                                    }
                                 }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL") }
                             }
-                        )
+                            if (pair.size < 2) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
@@ -169,15 +175,11 @@ private fun PlaylistDetailScreen(viewModel: AppViewModel, playlistName: String, 
                 
                 Spacer(Modifier.width(8.dp))
                 
-                Button(
+                FilledIconButton(
                     onClick = { viewModel.openPlaylistAsQueue(playlistName) },
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.height(40.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("START AS QUEUE", fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
             }
         }
@@ -196,13 +198,19 @@ private fun PlaylistDetailScreen(viewModel: AppViewModel, playlistName: String, 
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 120.dp)) {
                 itemsIndexed(items, key = { _, item -> item.path + item.id }) { index, item ->
-                    var accumulatedDrag by remember { mutableFloatStateOf(0f) }
+                    val isActive = viewModel.currentMediaItem.value?.path == item.path
+                    var accumulatedDrag by remember(item.path, index) { mutableFloatStateOf(0f) }
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart) {
-                                if (playlistName == "FAVORITES") viewModel.toggleFavorite(item)
-                                else viewModel.removeFromPlaylist(playlistName, item)
-                                true
+                                if (isActive) {
+                                    viewModel.showToast("Current playing cannot be removed")
+                                    false
+                                } else {
+                                    if (playlistName == "FAVORITES") viewModel.toggleFavorite(item)
+                                    else viewModel.removeFromPlaylist(playlistName, item)
+                                    true
+                                }
                             } else false
                         }
                     )
@@ -210,9 +218,14 @@ private fun PlaylistDetailScreen(viewModel: AppViewModel, playlistName: String, 
                     SwipeToDismissBox(
                         state = dismissState,
                         enableDismissFromStartToEnd = false,
+                        enableDismissFromEndToStart = !isActive,
                         backgroundContent = {
-                            Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)).padding(end = 16.dp), contentAlignment = Alignment.CenterEnd) {
-                                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+                            if (!isActive) {
+                                Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)).padding(end = 16.dp), contentAlignment = Alignment.CenterEnd) {
+                                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize())
                             }
                         }
                     ) {
@@ -220,29 +233,31 @@ private fun PlaylistDetailScreen(viewModel: AppViewModel, playlistName: String, 
                             item = item,
                             showIndex = true,
                             index = index + 1,
-                            isActive = viewModel.currentMediaItem.value?.path == item.path,
+                            isActive = isActive,
                             onClick = { viewModel.playMediaItem(item) },
-                            trailing = {
-                                Icon(
-                                    Icons.Default.DragHandle,
-                                    null,
-                                    modifier = Modifier.pointerInput(Unit) {
-                                        detectVerticalDragGestures(
-                                            onDragEnd = { accumulatedDrag = 0f },
-                                            onVerticalDrag = { change, dragAmount ->
-                                                change.consume()
-                                                accumulatedDrag += dragAmount
-                                                if (accumulatedDrag > 60f && index < items.lastIndex) {
-                                                    viewModel.reorderPlaylist(playlistName, index, index + 1)
-                                                    accumulatedDrag = 0f
-                                                } else if (accumulatedDrag < -60f && index > 0) {
-                                                    viewModel.reorderPlaylist(playlistName, index, index - 1)
-                                                    accumulatedDrag = 0f
+                            trailing = if (playlistName == "FAVORITES" || isActive) null else {
+                                {
+                                    Icon(
+                                        Icons.Default.DragHandle,
+                                        null,
+                                        modifier = Modifier.pointerInput(Unit) {
+                                            detectVerticalDragGestures(
+                                                onDragEnd = { accumulatedDrag = 0f },
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    accumulatedDrag += dragAmount
+                                                    if (accumulatedDrag > 60f && index < items.lastIndex) {
+                                                        viewModel.reorderPlaylist(playlistName, index, index + 1)
+                                                        accumulatedDrag = 0f
+                                                    } else if (accumulatedDrag < -60f && index > 0) {
+                                                        viewModel.reorderPlaylist(playlistName, index, index - 1)
+                                                        accumulatedDrag = 0f
+                                                    }
                                                 }
-                                            }
-                                        )
-                                    }
-                                )
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         )
                     }
@@ -274,7 +289,7 @@ private fun pEQItemCard(title: String, subtitle: String, icon: ImageVector, onCl
                 Text(title, fontSize = 15.sp, fontWeight = FontWeight.Black)
                 Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.Default.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
         }
     }
 }

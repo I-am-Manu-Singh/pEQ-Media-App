@@ -67,6 +67,9 @@ fun AppViewModel.toggleFocusMode() {
     if (isFocusMode.value) {
         isLockScreenMode.value = true
         showToast("Focus Mode Active: Neural AOD Engaged")
+    } else {
+        isLockScreenMode.value = false
+        showToast("Focus Mode Disabled")
     }
 }
 

@@ -148,6 +148,37 @@ fun AppViewModel.toggleFavorite(item: pEQMediaItem) {
     persistSession()
 }
 
+fun AppViewModel.resolveItem(path: String): org.audiocular.peq.app.data.pEQMediaItem? {
+    return mediaLibrary.value.find { it.path == path } ?: run {
+        if (path.startsWith("http")) {
+            org.audiocular.peq.app.data.pEQMediaItem(
+                id = "stream_${path.hashCode()}",
+                title = "Web Stream",
+                subtitle = path,
+                path = path,
+                type = if (path.lowercase().let { it.contains(".mp4") || it.contains(".m3u8") || it.contains(".mov") || it.contains("video") || it.contains(".mkv") }) 
+                    org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
+                format = path.substringAfterLast(".").uppercase(),
+                sizeBytes = 0L,
+                durationMs = 0L
+            )
+        } else {
+            org.audiocular.peq.app.data.pEQMediaItem(
+                id = "engine_${path.hashCode()}",
+                title = path.substringAfterLast("/").substringBeforeLast("."),
+                subtitle = "Neural Engine",
+                artist = "Neural Engine",
+                path = path,
+                type = if (path.lowercase().let { it.contains("video") || it.contains(".mp4") || it.contains(".mkv") }) 
+                    org.audiocular.peq.app.data.MediaType.VIDEO else org.audiocular.peq.app.data.MediaType.AUDIO,
+                format = path.substringAfterLast(".").uppercase(),
+                sizeBytes = 0L,
+                durationMs = 0L
+            )
+        }
+    }
+}
+
 fun AppViewModel.navigateToFolder(path: String) {
     if (currentFolderPath.value.isNotEmpty()) {
         folderHistory.add(currentFolderPath.value)
@@ -275,4 +306,205 @@ fun AppViewModel.generateMoodPlaylist(mood: String, type: String) {
             showToast("No matching assets found for $mood")
         }
     }
+}
+
+fun AppViewModel.playNow(item: pEQMediaItem) {
+    playMediaItem(item, addToQueue = true)
+}
+
+fun AppViewModel.playNext(item: pEQMediaItem) {
+    val existingIndex = playbackQueue.indexOfFirst { it.path == item.path }
+    if (existingIndex != -1) {
+        if (existingIndex == currentQueueIndex.value) {
+            showToast("Already playing")
+            return
+        }
+        playbackQueue.removeAt(existingIndex)
+    }
+
+    val currentIndex = currentQueueIndex.value
+    val insertIndex = if (currentIndex in playbackQueue.indices) currentIndex + 1 else 0
+    playbackQueue.add(insertIndex, item)
+    
+    if (existingIndex != -1 && existingIndex < currentIndex) {
+        setCurrentQueueIndex(currentIndex - 1)
+    }
+    
+    showToast("Play next: ${item.title}")
+    persistSession()
+}
+
+fun AppViewModel.shareItem(item: pEQMediaItem) {
+    val scan = scanner ?: return
+    if (item.type == MediaType.VIDEO) {
+        val video = scan.mediaFiles.value.find { it.path == item.path } ?: VideoFile(
+            id = item.id,
+            name = item.fileName,
+            title = item.title,
+            path = item.path,
+            duration = item.durationMs,
+            sizeBytes = item.sizeBytes,
+            resolution = item.resolution ?: "Unknown",
+            codec = item.codec ?: "AVC",
+            dateModified = item.dateModified,
+            thumbnail = item.thumbnail ?: ""
+        )
+        scan.shareFile(video)
+    } else {
+        val audio = scan.audioFiles.value.find { it.path == item.path } ?: AudioFile(
+            id = item.id,
+            name = item.fileName,
+            title = item.title,
+            path = item.path,
+            duration = item.durationMs,
+            sizeBytes = item.sizeBytes,
+            format = item.format,
+            isLossless = item.isLossless,
+            artist = item.artist,
+            album = item.album,
+            composer = item.composer,
+            year = item.year ?: 0,
+            trackNumber = item.trackNumber ?: 0,
+            discNumber = item.discNumber ?: 1,
+            dateAdded = item.dateAdded,
+            dateModified = item.dateModified,
+            thumbnail = item.thumbnail ?: "",
+            lyrics = item.lyrics,
+            hasLyrics = !item.lyrics.isNullOrBlank()
+        )
+        scan.shareAudioFile(audio)
+    }
+}
+
+fun AppViewModel.deleteItem(item: pEQMediaItem) {
+    val scan = scanner ?: return
+    
+    _mediaLibrary.value = _mediaLibrary.value.filter { it.path != item.path }
+    
+    val queueIndex = playbackQueue.indexOfFirst { it.path == item.path }
+    if (queueIndex != -1) {
+        playbackQueue.removeAt(queueIndex)
+        if (currentQueueIndex.value >= playbackQueue.size) {
+            _currentQueueIndex.value = (playbackQueue.size - 1).coerceAtLeast(0)
+        }
+    }
+    
+    favoriteItems.removeAll { it.path == item.path }
+    favorites.remove(item.id)
+    
+    customPlaylists.forEach { (name, list) ->
+        list.removeAll { it.path == item.path }
+    }
+    
+    if (item.type == MediaType.VIDEO) {
+        val video = scan.mediaFiles.value.find { it.path == item.path } ?: VideoFile(
+            id = item.id,
+            name = item.fileName,
+            title = item.title,
+            path = item.path,
+            duration = item.durationMs,
+            sizeBytes = item.sizeBytes,
+            resolution = item.resolution ?: "Unknown",
+            codec = item.codec ?: "AVC",
+            dateModified = item.dateModified,
+            thumbnail = item.thumbnail ?: ""
+        )
+        scan.deleteFile(video)
+    } else {
+        val audio = scan.audioFiles.value.find { it.path == item.path } ?: AudioFile(
+            id = item.id,
+            name = item.fileName,
+            title = item.title,
+            path = item.path,
+            duration = item.durationMs,
+            sizeBytes = item.sizeBytes,
+            format = item.format,
+            isLossless = item.isLossless,
+            artist = item.artist,
+            album = item.album,
+            composer = item.composer,
+            year = item.year ?: 0,
+            trackNumber = item.trackNumber ?: 0,
+            discNumber = item.discNumber ?: 1,
+            dateAdded = item.dateAdded,
+            dateModified = item.dateModified,
+            thumbnail = item.thumbnail ?: "",
+            lyrics = item.lyrics,
+            hasLyrics = !item.lyrics.isNullOrBlank()
+        )
+        scan.deleteAudioFile(audio)
+    }
+    showToast("File deleted: ${item.title}")
+    persistSession()
+}
+
+fun AppViewModel.updateMetadata(
+    item: pEQMediaItem,
+    newTitle: String,
+    newArtist: String,
+    newAlbum: String,
+    newAlbumArtist: String,
+    newGenre: String,
+    newComposer: String,
+    newTrackNumber: Int,
+    newDiscNumber: Int,
+    newYear: Int
+) {
+    val updatedItem = item.copy(
+        title = newTitle,
+        subtitle = if (newArtist.isNotBlank()) newArtist else "Unknown Artist",
+        artist = newArtist,
+        album = newAlbum,
+        albumArtist = newAlbumArtist,
+        genre = newGenre,
+        composer = newComposer,
+        trackNumber = newTrackNumber,
+        discNumber = newDiscNumber,
+        year = newYear
+    )
+
+    _mediaLibrary.value = _mediaLibrary.value.map {
+        if (it.path == item.path) updatedItem else it
+    }
+
+    val queueIndices = playbackQueue.mapIndexedNotNull { idx, it -> if (it.path == item.path) idx else null }
+    queueIndices.forEach { idx ->
+        playbackQueue[idx] = updatedItem
+    }
+
+    val favIndices = favoriteItems.mapIndexedNotNull { idx, it -> if (it.path == item.path) idx else null }
+    favIndices.forEach { idx ->
+        favoriteItems[idx] = updatedItem
+    }
+
+    customPlaylists.forEach { (name, list) ->
+        val listIndices = list.mapIndexedNotNull { idx, it -> if (it.path == item.path) idx else null }
+        listIndices.forEach { idx ->
+            list[idx] = updatedItem
+        }
+    }
+
+    if (currentMediaItem.value?.path == item.path) {
+        currentMediaItem.value = updatedItem
+    }
+
+    if (selectedItemForInfo.value?.path == item.path) {
+        selectedItemForInfo.value = updatedItem
+    }
+
+    scanner?.updateAudioMetadata(
+        path = item.path,
+        title = newTitle,
+        artist = newArtist,
+        album = newAlbum,
+        albumArtist = newAlbumArtist,
+        genre = newGenre,
+        composer = newComposer,
+        trackNumber = newTrackNumber,
+        discNumber = newDiscNumber,
+        year = newYear
+    )
+    
+    showToast("Metadata updated successfully")
+    persistSession()
 }

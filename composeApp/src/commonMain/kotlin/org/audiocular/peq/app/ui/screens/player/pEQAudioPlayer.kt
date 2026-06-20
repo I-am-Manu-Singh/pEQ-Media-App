@@ -178,57 +178,53 @@ fun NeuralAudioWorkstation(
                         }
                     }
                 }
-            }
-
-
- else {
+            } else {
                 Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                     NeuralPlayerHeaderSimple(viewModel = viewModel, isLandscape = false)
 
                     Column(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(modifier = Modifier.fillMaxWidth().weight(0.92f), contentAlignment = Alignment.Center) {
+                            val showLyrics by viewModel.isLyricsVisible
+                            val showHarmony by viewModel.isHarmonyVisible
                             AnimatedContent(
-                                targetState = isLyricsVisible,
+                                targetState = if (showHarmony) "harmony" else if (showLyrics) "lyrics" else "vinyl",
                                 transitionSpec = {
                                     fadeIn(animationSpec = tween(260)) togetherWith fadeOut(animationSpec = tween(180))
                                 },
                                 label = "portrait_switch"
-                            ) { showLyrics ->
-                                if (showLyrics) {
-                                        LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize().padding(12.dp))
-                                } else {
-                                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                                        when (visualizerMode) {
-                                            AppViewModel.VisualizerMode.CIRCULAR -> {
-                                                CircularSpectrumAnalyzer(magnitudes = rtaData)
+                            ) { mode ->
+                                when (mode) {
+                                    "harmony" -> ChordVisualizerScreen(viewModel)
+                                    "lyrics" -> LyricsVinylCard(viewModel = viewModel, modifier = Modifier.fillMaxSize().padding(12.dp))
+                                    else -> {
+                                        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
+                                            when (visualizerMode) {
+                                                AppViewModel.VisualizerMode.CIRCULAR -> {
+                                                    CircularSpectrumAnalyzer(magnitudes = rtaData)
+                                                }
+                                                AppViewModel.VisualizerMode.RTA -> {
+                                                    RtaSpectrumVisualizer(magnitudes = rtaData)
+                                                }
+                                                AppViewModel.VisualizerMode.WAVEFORM -> {
+                                                    WaveformVisualizer(viewModel = viewModel)
+                                                }
+                                                else -> {
+                                                    currentItem?.let {
+                                                        AudioVinylEngine(
+                                                            item = it,
+                                                            isPlaying = viewModel.isPlaying.value
+                                                        )
+                                                    } ?: Box(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = "No Media",
+                                                            color = Color.White.copy(alpha = 0.5f)
+                                                        )
+                                                    }
+                                                }
                                             }
-                                            AppViewModel.VisualizerMode.RTA -> {
-                                                RtaSpectrumVisualizer(magnitudes = rtaData)
-                                            }
-                                            AppViewModel.VisualizerMode.WAVEFORM -> {
-                                                WaveformVisualizer(viewModel = viewModel)
-                                            }
-                                            else -> {
-
-    currentItem?.let {
-
-        AudioVinylEngine(
-            item = it,
-            isPlaying = viewModel.isPlaying.value
-        )
-
-    } ?: Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = "No Media",
-            color = Color.White.copy(alpha = 0.5f)
-        )
-    }
-}
-                                            
                                         }
                                     }
                                 }
@@ -466,9 +462,9 @@ private fun EmptyLyricsState(
 
         Text(
             text = when {
-                lyricJob?.status == "NO MATCH FOUND" -> "We couldn't find synchronized lyrics for this track in our neural archive."
+                lyricJob?.status == "NO MATCH FOUND" -> "We couldn't find synchronized lyrics for this track."
                 isSearching -> lyricJob?.status ?: "Neural sync engine is analyzing temporal vocal data..."
-                else -> "Establishing connection to the pEQ metadata repository..."
+                else -> "Searching for lyrics..."
             },
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
@@ -752,7 +748,6 @@ fun TransportControlsRestored(viewModel: AppViewModel) {
         }
         FilledTonalIconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(56.dp)) { Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(30.dp)) }
         SmallTransportButton(icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, active = isFavorite) { viewModel.toggleFavorite(item) }
-        SmallTransportButton(icon = Icons.Default.AutoAwesome, active = viewModel.isAiUpscalingEnabled.value) { viewModel.toggleAiUpscaling() }
     }
 }
 
@@ -821,10 +816,9 @@ fun NeuralHeaderPlayerControls(viewModel: AppViewModel) {
             viewModel.toggleAbRepeat()
             if (!viewModel.abRepeatActive.value) { viewModel.abRepeatPointA.value = -1L; viewModel.abRepeatPointB.value = -1L; viewModel.updateLoopPoints(null, null) }
         }
-        // PlayerActionButton(icon = Icons.Default.AutoAwesome, active = viewModel.visualizerMode.value != AppViewModel.VisualizerMode.BARS) {
-        //     val modes = AppViewModel.VisualizerMode.entries
-        //     viewModel.visualizerMode.value = modes[(viewModel.visualizerMode.value.ordinal + 1) % modes.size]
-        // }
+        PlayerActionButton(icon = Icons.Default.AutoAwesome, active = viewModel.isAiUpscalingEnabled.value) {
+            viewModel.toggleAiUpscaling()
+        }
         PlayerActionButton(icon = Icons.Default.Timer, active = viewModel.sleepTimerActive.value) { viewModel.showSleepTimerSheet.value = true }
         PlayerActionButton(icon = Icons.Default.ContentCut, active = viewModel.showCutter.value) { viewModel.showCutter.value = !viewModel.showCutter.value }
         PlayerActionButton(icon = if (viewModel.isHarmonyVisible.value) Icons.Default.MusicNote else Icons.Default.Audiotrack, active = viewModel.isHarmonyVisible.value) { viewModel.isHarmonyVisible.value = !viewModel.isHarmonyVisible.value }

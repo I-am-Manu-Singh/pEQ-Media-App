@@ -247,11 +247,10 @@ stableVideoSurface(contentScale)
 
             var dragMode: GestureMode? = null
             var accumulatedSeek = 0f
-            var accumulatedZoom = viewModel.videoZoom.value
 
             detectDragGestures(
 
-                onDragStart = { offset ->
+                onDragStart = { _ ->
 
                     controlsVisible = false
                     viewModel.isGestureInteracting.value = true
@@ -448,11 +447,11 @@ stableVideoSurface(contentScale)
                 gestureUIState?.let { (label, value) ->
                     if (label == "VOLUME") {
                         Box(modifier = Modifier.fillMaxSize().padding(end = 40.dp), contentAlignment = Alignment.CenterEnd) {
-                            VerticalGestureBar(label = "VOLUME", value = value, icon = if (value > 0.5f) Icons.Default.VolumeUp else if (value > 0f) Icons.Default.VolumeDown else Icons.Default.VolumeMute)
+                            VerticalGestureBar(value = value, icon = if (value > 0.5f) Icons.AutoMirrored.Filled.VolumeUp else if (value > 0f) Icons.AutoMirrored.Filled.VolumeDown else Icons.AutoMirrored.Filled.VolumeMute)
                         }
                     } else if (label == "BRIGHTNESS") {
                         Box(modifier = Modifier.fillMaxSize().padding(start = 40.dp), contentAlignment = Alignment.CenterStart) {
-                            VerticalGestureBar(label = "BRIGHTNESS", value = value, icon = Icons.Default.BrightnessMedium)
+                            VerticalGestureBar(value = value, icon = Icons.Default.BrightnessMedium)
                         }
                     } else {
                         // SEEK (Center)
@@ -498,13 +497,15 @@ stableVideoSurface(contentScale)
 ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Lock Button (Persistent)
-                Box(modifier = Modifier.fillMaxWidth().padding(top = 18.dp, end = 18.dp), contentAlignment = Alignment.TopEnd) {
-                    FilledTonalIconButton(
-                        onClick = { isLocked = !isLocked },
-                        modifier = Modifier.size(48.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f))
-                    ) {
-                        Icon(imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(20.dp))
+                if (isLocked) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(top = 18.dp, end = 18.dp), contentAlignment = Alignment.TopEnd) {
+                        FilledTonalIconButton(
+                            onClick = { isLocked = false },
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f))
+                        ) {
+                            Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
 
@@ -555,7 +556,7 @@ stableVideoSurface(contentScale)
                     }
 
                     // Bottom Panel
-                    pEQGlassPanel(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).widthIn(max = 640.dp)) {
+                    pEQGlassPanel(modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 680.dp)) {
                         Column {
                             ImmersiveSeekSection(viewModel = viewModel)
                             Spacer(Modifier.height(8.dp))
@@ -581,12 +582,16 @@ fun ImmersiveTopBar(
     onLock: () -> Unit,
     onInfo: () -> Unit
 ) {
-    val viewModel = LocalAppViewModel.current
-    Box(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-        // Floating Back Button (Doesn't take row space)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Back Button
         FilledTonalIconButton(
             onClick = onClose,
-            modifier = Modifier.align(Alignment.CenterStart).size(48.dp),
+            modifier = Modifier.size(48.dp),
             colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f))
         ) { 
             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", modifier = Modifier.size(24.dp), tint = Color.White) 
@@ -594,14 +599,17 @@ fun ImmersiveTopBar(
         
         Text(
             text = title, 
-            modifier = Modifier.align(Alignment.Center).padding(horizontal = 64.dp), 
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp), 
             color = Color.White, 
             fontWeight = FontWeight.Black, 
             maxLines = 1, 
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
         )
-        Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             FilledTonalIconButton(onClick = {
                 val next = when (contentScale) {
                     ContentScale.Fit -> ContentScale.FillBounds
@@ -678,7 +686,7 @@ private fun ImmersiveControlsRow(viewModel: AppViewModel, item: pEQMediaItem) {
 }
 
 @Composable
-private fun VerticalGestureBar(label: String, value: Float, icon: ImageVector) {
+private fun VerticalGestureBar(value: Float, icon: ImageVector) {
     Surface(
         modifier = Modifier.width(54.dp).height(220.dp),
         shape = RoundedCornerShape(28.dp),
@@ -871,93 +879,51 @@ public fun ChapterOverlayConsole(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-
-                verticalAlignment =
-                    Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
-                FilledTonalIconButton(
-                    onClick = {
-
-                        viewModel.isChaptersVisible.value =
-                            false
-                    }
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Default.Close,
-
-                        contentDescription = null
-                    )
-                }
-
-                Spacer(Modifier.width(14.dp))
-
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-
                     Text(
                         text = "Chapters",
-
                         fontSize = 22.sp,
-
                         fontWeight = FontWeight.Black
                     )
-
-                    Spacer(Modifier.height(2.dp))
-
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text =
-                            "${chapters.size} chapters",
-
+                        text = "${chapters.size} chapters detected",
                         fontSize = 11.sp,
-
-                        color =
-                            MaterialTheme.colorScheme
-                                .onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Row(
-                    horizontalArrangement =
-                        Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    FilledTonalIconButton(
-                        onClick = {
-                            viewModel.fetchChapters()
-                        }
-                    ) {
-                        Icon(imageVector = Icons.Default.Download, contentDescription = "Online")
-                    }
-                    
                     FilledTonalIconButton(
                         onClick = {
                             viewModel.requestChaptersPicker()
                         }
                     ) {
-                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = "Import")
+                        Icon(imageVector = Icons.Default.FolderOpen, contentDescription = "Pick Local File")
                     }
 
-                    FilledIconButton(
+                    FilledTonalIconButton(
                         onClick = {
-
-                            viewModel.isChaptersVisible.value =
-                                false
-
-                            viewModel.isEditingChapters.value =
-                                true
+                            viewModel.isChaptersVisible.value = false
+                            viewModel.isEditingChapters.value = true
                         }
                     ) {
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Chapters")
+                    }
 
-                        Icon(
-                            imageVector =
-                                Icons.Default.Edit,
-
-                            contentDescription = null
-                        )
+                    FilledTonalIconButton(
+                        onClick = {
+                            viewModel.isChaptersVisible.value = false
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
                     }
                 }
             }

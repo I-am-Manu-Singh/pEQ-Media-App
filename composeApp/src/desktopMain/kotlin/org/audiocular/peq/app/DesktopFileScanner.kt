@@ -232,6 +232,19 @@ class DesktopFileScanner : pEQFileScanner {
                     }
 
                     if (!jaudiotaggerSuccess) {
+                        if (extension == "mp4" || extension == "m4v") {
+                            try {
+                                val binaryData = Mp4CoverExtractor.extract(file)
+                                if (binaryData != null) {
+                                    val cacheDir = File(System.getProperty("java.io.tmpdir"))
+                                    val cacheFile = File(cacheDir, "peq_art_${file.nameWithoutExtension.hashCode()}.jpg")
+                                    cacheFile.writeBytes(binaryData)
+                                    thumbnail = "file://${cacheFile.absolutePath}"
+                                }
+                            } catch (e: Exception) {
+                                println("pEQControl: Mp4CoverExtractor failed for ${file.name}: ${e.message}")
+                            }
+                        }
                         try {
                             val media =
                                 factory.media()
@@ -244,10 +257,7 @@ class DesktopFileScanner : pEQFileScanner {
                                  * SAFE PARSE
                                  */
                                 try {
-                                    media.parsing()
-                                        .parse()
-
-                                    Thread.sleep(100)
+                                    media.parsing().parse(uk.co.caprica.vlcj.media.ParseFlag.FETCH_LOCAL)
                                 } catch (_: Exception) {
                                     println(
                                         "pEQControl: Metadata timeout -> ${file.name}"
@@ -305,14 +315,13 @@ class DesktopFileScanner : pEQFileScanner {
                                             ?.replace(".", " ")
                                         ?: "Unknown Album"
 
-                                /*
-                                 * THUMBNAIL
-                                 */
-                                thumbnail =
-                                    findThumbnail(file, media)
-                                        ?.let {
-                                            "file://$it"
-                                        }
+                                 /*
+                                  * THUMBNAIL
+                                  */
+                                 val vlcTh = findThumbnail(file, media)
+                                 if (vlcTh != null) {
+                                     thumbnail = "file://$vlcTh"
+                                 }
 
                             } catch (e: Exception) {
                                 println(
@@ -332,6 +341,11 @@ class DesktopFileScanner : pEQFileScanner {
                             ?.let {
                                 "file://$it"
                             }
+                    }
+                    if (thumbnail == null && (extension in setOf("mp4", "mkv", "mov", "avi", "webm", "3gp"))) {
+                        generateVideoThumbnailVLC(file)?.let {
+                            thumbnail = "file://$it"
+                        }
                     }
 
                     val parsedName = cleanFilename(file)
@@ -515,9 +529,17 @@ class DesktopFileScanner : pEQFileScanner {
          */
         val vlcArt = media?.meta()?.get(Meta.ARTWORK_URL)
         if (!vlcArt.isNullOrBlank()) {
-            val artPath = vlcArt.replace("file://", "")
-            if (File(artPath).exists()) {
-                return artPath
+            try {
+                var artPath = vlcArt
+                if (artPath.startsWith("file://")) {
+                    artPath = artPath.substring(7)
+                }
+                artPath = java.net.URLDecoder.decode(artPath, "UTF-8")
+                if (File(artPath).exists()) {
+                    return artPath
+                }
+            } catch (e: Exception) {
+                println("pEQControl: Failed decoding vlcArt path: ${e.message}")
             }
         }
 
@@ -693,6 +715,83 @@ class DesktopFileScanner : pEQFileScanner {
 
             emptyList()
         }
+    }
+
+    override fun updateAudioMetadata(
+        path: String,
+        title: String,
+        artist: String,
+        album: String,
+        albumArtist: String,
+        genre: String,
+        composer: String,
+        trackNumber: Int,
+        discNumber: Int,
+        year: Int
+    ) {
+        try {
+            val file = File(path)
+            if (file.exists()) {
+                val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                val tag = audioFile.tag ?: org.jaudiotagger.tag.id3.ID3v24Tag()
+                audioFile.tag = tag
+                
+                tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist)
+                tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, genre)
+                tag.setField(org.jaudiotagger.tag.FieldKey.COMPOSER, composer)
+                if (trackNumber > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.TRACK, trackNumber.toString())
+                }
+                if (discNumber > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.DISC_NO, discNumber.toString())
+                }
+                if (year > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.YEAR, year.toString())
+                }
+                
+                audioFile.commit()
+                println("pEQControl: [METADATA] Successfully committed ID3 tags for $path on Desktop")
+                refresh()
+            }
+        } catch (e: Exception) {
+            println("pEQControl: [METADATA] Failed to write ID3 tags physically: ${e.message}")
+        }
+    }
+
+    private fun generateVideoThumbnailVLC(videoFile: File): String? {
+        var tempPlayer: uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer? = null
+        try {
+            val cacheDir = File(System.getProperty("java.io.tmpdir"))
+            val expectedOutFile = File(cacheDir, "peq_art_${videoFile.nameWithoutExtension.hashCode()}.jpg")
+            if (expectedOutFile.exists()) {
+                return expectedOutFile.absolutePath
+            }
+            
+            tempPlayer = factory.mediaPlayers().newEmbeddedMediaPlayer()
+            tempPlayer.audio().setMute(true)
+            tempPlayer.media().prepare(videoFile.absolutePath)
+            tempPlayer.controls().setPosition(0.05f) // Set to 5% timeline to avoid black screen
+            tempPlayer.controls().start()
+            
+            var attempts = 0
+            while (!expectedOutFile.exists() && attempts < 15) {
+                Thread.sleep(100)
+                tempPlayer.snapshots().save(expectedOutFile, 320, 0)
+                attempts++
+            }
+            if (expectedOutFile.exists()) {
+                return expectedOutFile.absolutePath
+            }
+        } catch (e: Exception) {
+            println("pEQControl: VLC snapshot generation failed for ${videoFile.name}: ${e.message}")
+        } finally {
+            try { tempPlayer?.controls()?.stop() } catch (_: Exception) {}
+            try { tempPlayer?.release() } catch (_: Exception) {}
+        }
+        return null
     }
 
     /*

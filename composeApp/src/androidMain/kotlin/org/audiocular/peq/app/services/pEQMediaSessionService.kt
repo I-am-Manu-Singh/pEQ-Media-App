@@ -38,6 +38,7 @@ import org.audiocular.peq.app.R
 import org.audiocular.peq.app.widgets.NeuralGlanceWidget
 import java.io.File
 import java.io.FileOutputStream
+import org.audiocular.peq.app.data.normalizePath
 
 class pEQMediaSessionService : MediaSessionService() {
 
@@ -56,6 +57,7 @@ class pEQMediaSessionService : MediaSessionService() {
         const val ACTION_SHUFFLE = "org.audiocular.peq.app.ACTION_SHUFFLE"
         const val ACTION_FAVORITE = "org.audiocular.peq.app.ACTION_FAVORITE"
         const val ACTION_REPEAT = "org.audiocular.peq.app.ACTION_REPEAT"
+        const val ACTION_PLAY_INDEX = "org.audiocular.peq.app.ACTION_PLAY_INDEX"
     }
 
     /*
@@ -90,12 +92,101 @@ class pEQMediaSessionService : MediaSessionService() {
      */
 
     override fun onCreate() {
-
         super.onCreate()
-
+        org.audiocular.peq.app.data.initPersistenceManager(applicationContext)
         createNotificationChannel()
-
         player = createPlayer()
+
+        // Restore player state from saved session if empty
+        try {
+            val persistence = org.audiocular.peq.app.data.getPersistenceManager()
+            val session = persistence.loadSession()
+            if (session != null && player.mediaItemCount == 0) {
+                val queue = session.queue
+                if (queue.isNotEmpty()) {
+                    val mediaItems = queue.map { item ->
+                        val artBytes = if (item.thumbnail != null) {
+                            try {
+                                val uri = android.net.Uri.parse(item.thumbnail)
+                                if (uri.scheme == "content" || uri.scheme == "file") {
+                                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                } else {
+                                    null
+                                }
+                            } catch (_: Exception) {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                        MediaItem.Builder()
+                            .setUri(item.path)
+                            .setMediaId(item.path)
+                            .setMediaMetadata(
+                                androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(item.title)
+                                    .setArtist(item.subtitle)
+                                    .setArtworkUri(item.thumbnail?.let { android.net.Uri.parse(it) })
+                                    .setArtworkData(artBytes)
+                                    .build()
+                            )
+                            .build()
+                    }
+                    player.setMediaItems(mediaItems)
+                    
+                    val lastIndex = queue.indexOfFirst { normalizePath(it.path) == normalizePath(session.lastTrackPath) }.coerceAtLeast(0)
+                    player.prepare()
+                    player.seekTo(lastIndex, session.lastPosition)
+                    player.shuffleModeEnabled = session.isShuffle
+                    player.repeatMode = when (session.repeatMode) {
+                        org.audiocular.peq.app.data.RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+                        org.audiocular.peq.app.data.RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                } else {
+                    val path = session.lastTrackPath
+                    if (path != null) {
+                        val artBytes = if (session.lastTrackThumbnail != null) {
+                            try {
+                                val uri = android.net.Uri.parse(session.lastTrackThumbnail)
+                                if (uri.scheme == "content" || uri.scheme == "file") {
+                                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                } else {
+                                    null
+                                }
+                            } catch (_: Exception) {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                        val mediaItem = MediaItem.Builder()
+                            .setUri(path)
+                            .setMediaId(path)
+                            .setMediaMetadata(
+                                androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(session.lastTrackTitle ?: "pEQ Track")
+                                    .setArtist(session.lastTrackArtist ?: "Ready for Neural Input")
+                                    .setArtworkUri(session.lastTrackThumbnail?.let { android.net.Uri.parse(it) })
+                                    .setArtworkData(artBytes)
+                                    .build()
+                            )
+                            .build()
+                        player.setMediaItem(mediaItem)
+                        player.prepare()
+                        player.seekTo(session.lastPosition)
+                        player.shuffleModeEnabled = session.isShuffle
+                        player.repeatMode = when (session.repeatMode) {
+                            org.audiocular.peq.app.data.RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+                            org.audiocular.peq.app.data.RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+                            else -> Player.REPEAT_MODE_OFF
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(player) {
             override fun getAvailableCommands(): Player.Commands {
@@ -162,6 +253,7 @@ class pEQMediaSessionService : MediaSessionService() {
 
                         stopWidgetProgressUpdater()
                     }
+                    persistSessionFromService()
                 }
 
                 override fun onMediaItemTransition(
@@ -174,6 +266,7 @@ class pEQMediaSessionService : MediaSessionService() {
                     updateWidgetProgress()
 
                     updateNotification()
+                    persistSessionFromService()
                 }
 
                 override fun onMediaMetadataChanged(
@@ -183,6 +276,7 @@ class pEQMediaSessionService : MediaSessionService() {
                     updateWidgetMetadata()
 
                     refreshWidgets()
+                    persistSessionFromService()
                 }
 
                 override fun onPlaybackStateChanged(
@@ -192,6 +286,25 @@ class pEQMediaSessionService : MediaSessionService() {
                     updateWidgetProgress()
 
                     updateNotification()
+                    persistSessionFromService()
+                }
+
+                override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                    getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("is_shuffle", shuffleModeEnabled)
+                        .apply()
+                    refreshWidgets()
+                    persistSessionFromService()
+                }
+
+                override fun onRepeatModeChanged(repeatMode: Int) {
+                    getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
+                        .edit()
+                        .putInt("repeat_mode", repeatMode)
+                        .apply()
+                    refreshWidgets()
+                    persistSessionFromService()
                 }
             }
         )
@@ -234,11 +347,21 @@ class pEQMediaSessionService : MediaSessionService() {
             }
 
             ACTION_NEXT -> {
-                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_NEXT"))
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                } else {
+                    player.seekToNext()
+                }
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_NEXT").apply { setPackage(packageName) })
             }
 
             ACTION_PREV -> {
-                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PREV"))
+                if (player.hasPreviousMediaItem()) {
+                    player.seekToPreviousMediaItem()
+                } else {
+                    player.seekToPrevious()
+                }
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PREV").apply { setPackage(packageName) })
             }
 
             ACTION_REPLAY_10 -> {
@@ -250,21 +373,62 @@ class pEQMediaSessionService : MediaSessionService() {
             }
 
             ACTION_SHUFFLE -> {
-                player.shuffleModeEnabled = !player.shuffleModeEnabled
-                updateWidgetMetadata()
+                val newShuffle = !player.shuffleModeEnabled
+                player.shuffleModeEnabled = newShuffle
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_SHUFFLE").apply {
+                    setPackage(packageName)
+                    putExtra("shuffle_enabled", newShuffle)
+                })
             }
 
             ACTION_FAVORITE -> {
-                val prefs = getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
-                val isFav = prefs.getBoolean("is_favorite", false)
-                prefs.edit().putBoolean("is_favorite", !isFav).apply()
+                val currentMediaItem = player.currentMediaItem
+                val path = currentMediaItem?.localConfiguration?.uri?.toString()
+                if (path != null) {
+                    val normalizedPath = normalizePath(path)
+                    val persistence = org.audiocular.peq.app.data.getPersistenceManager()
+                    val favoritesList = persistence.loadFavorites().toMutableList()
+                    val existing = favoritesList.find { normalizePath(it) == normalizedPath }
+                    val newFavoriteStatus = if (existing != null) {
+                        favoritesList.remove(existing)
+                        false
+                    } else {
+                        favoritesList.add(path)
+                        true
+                    }
+                    persistence.saveFavorites(favoritesList)
+                    getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("is_favorite", newFavoriteStatus)
+                        .apply()
+                }
                 updateWidgetMetadata()
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_FAVORITE").apply { setPackage(packageName) })
             }
 
             ACTION_REPEAT -> {
-                val next = (player.repeatMode + 1) % 3 // OFF, ONE, ALL
-                player.repeatMode = next
-                updateWidgetMetadata()
+                val newRepeat = when (player.repeatMode) {
+                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                    else -> Player.REPEAT_MODE_OFF
+                }
+                player.repeatMode = newRepeat
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_REPEAT").apply {
+                    setPackage(packageName)
+                    putExtra("repeat_mode", newRepeat)
+                })
+            }
+            
+            ACTION_PLAY_INDEX -> {
+                val index = intent.getIntExtra("play_index", -1)
+                if (index >= 0 && index < player.mediaItemCount) {
+                    player.seekTo(index, 0L)
+                    player.play()
+                }
+                sendBroadcast(Intent("org.audiocular.peq.app.ACTION_SYSTEM_PLAY_INDEX").apply {
+                    setPackage(packageName)
+                    putExtra("play_index", index)
+                })
             }
         }
 
@@ -526,7 +690,7 @@ class pEQMediaSessionService : MediaSessionService() {
             serviceScope.launch {
                 while (isActive) {
                     updateWidgetProgress()
-                    delay(5000)
+                    delay(1500)
                 }
             }
     }
@@ -616,7 +780,8 @@ class pEQMediaSessionService : MediaSessionService() {
                 }
             }
 
-        bitmap?.let { bmp ->
+        if (bitmap != null) {
+            val bmp = bitmap
 
             val palette =
                 Palette.from(bmp)
@@ -658,6 +823,7 @@ class pEQMediaSessionService : MediaSessionService() {
                             out
                         )
                     }
+                    refreshWidgets()
 
                 } catch (e: Exception) {
 
@@ -666,37 +832,51 @@ class pEQMediaSessionService : MediaSessionService() {
                     )
                 }
             }
+        } else {
+            serviceScope.launch(
+                Dispatchers.IO
+            ) {
+                try {
+                    val file = File(filesDir, "widget_art.png")
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                    refreshWidgets()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
 
         /*
          * queue serialization
          */
 
-        val queueList =
-            mutableListOf<String>()
-
-        for (i in 1..3) {
-
-            val nextIndex =
-                player.currentMediaItemIndex + i
-
-            if (
-                nextIndex < player.mediaItemCount
-            ) {
-
-                val nextItem =
-                    player.getMediaItemAt(nextIndex)
-
-                queueList.add(
-                    nextItem.mediaMetadata.title
-                        ?.toString()
-                        ?: "Unknown"
-                )
-            }
+        val queueList = mutableListOf<String>()
+        for (i in 0 until player.mediaItemCount) {
+            val item = player.getMediaItemAt(i)
+            val title = item.mediaMetadata.title?.toString() ?: "Unknown"
+            queueList.add("$title|$i")
         }
 
         val queueJson =
             json.encodeToString(queueList)
+
+        val path = mediaItem?.localConfiguration?.uri?.toString() ?: ""
+        val isFavorite = if (path.isNotEmpty()) {
+            val normalizedPath = normalizePath(path)
+            org.audiocular.peq.app.data.getPersistenceManager().loadFavorites().any {
+                normalizePath(it) == normalizedPath
+            }
+        } else {
+            false
+        }
+
+        loadLyricsForCurrentTrack()
+        val pos = player.currentPosition
+        val idx = currentTrackLyrics.indexOfLast { it.first <= pos }.coerceAtLeast(0)
+        val currentLyric = currentTrackLyrics.getOrNull(idx)?.second ?: ""
+        val nextLyric = currentTrackLyrics.getOrNull(idx + 1)?.second ?: ""
 
         getSharedPreferences(
             "peq_widget_prefs",
@@ -705,11 +885,16 @@ class pEQMediaSessionService : MediaSessionService() {
             .edit()
             .putString("last_track", title)
             .putString("last_artist", artist)
+            .putString("last_path", path)
+            .putBoolean("is_favorite", isFavorite)
             .putInt("bg_color_1", color1)
             .putInt("bg_color_2", color2)
             .putBoolean("shuffle_enabled", player.shuffleModeEnabled)
+            .putBoolean("is_shuffle", player.shuffleModeEnabled)
             .putInt("repeat_mode", player.repeatMode)
             .putString("queue_json", queueJson)
+            .putString("current_lyric", currentLyric)
+            .putString("next_lyric", nextLyric)
             .apply()
 
         refreshWidgets()
@@ -720,56 +905,76 @@ class pEQMediaSessionService : MediaSessionService() {
      */
 
     private fun updateWidgetProgress() {
+        val durationMs = if (player.duration == C.TIME_UNSET) 0L else player.duration
+        val currentMs = player.currentPosition
 
-        val durationMs =
-            if (
-                player.duration == C.TIME_UNSET
-            ) {
-                0L
-            } else {
-                player.duration
-            }
+        val progress = if (durationMs > 0) {
+            ((currentMs * 100L) / durationMs).toInt()
+        } else {
+            0
+        }.coerceIn(0, 100)
 
-        val currentMs =
-            player.currentPosition
+        loadLyricsForCurrentTrack()
+        val idx = currentTrackLyrics.indexOfLast { it.first <= currentMs }.coerceAtLeast(0)
+        val currentLyric = currentTrackLyrics.getOrNull(idx)?.second ?: ""
+        val nextLyric = currentTrackLyrics.getOrNull(idx + 1)?.second ?: ""
 
-        val progress =
-            if (durationMs > 0) {
+        val prefs = getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
+        val oldCurrentLyric = prefs.getString("current_lyric", "") ?: ""
+        val oldNextLyric = prefs.getString("next_lyric", "") ?: ""
+        val oldPlaying = prefs.getBoolean("is_playing", false)
+        val oldProgress = prefs.getInt("progress", 0)
 
-                (
-                    (currentMs * 100L) /
-                            durationMs
-                    ).toInt()
+        val shouldRefresh = oldCurrentLyric != currentLyric || 
+                            oldNextLyric != nextLyric || 
+                            oldPlaying != player.isPlaying ||
+                            Math.abs(oldProgress - progress) >= 5
 
-            } else {
-
-                0
-            }.coerceIn(0, 100)
-
-        getSharedPreferences(
-            "peq_widget_prefs",
-            MODE_PRIVATE
-        )
-            .edit()
-            .putInt(
-                "progress",
-                progress
-            )
-            .putString(
-                "current_time",
-                formatTime(currentMs)
-            )
-            .putString(
-                "duration",
-                formatTime(durationMs)
-            )
-            .putBoolean(
-                "is_playing",
-                player.isPlaying
-            )
+        prefs.edit()
+            .putInt("progress", progress)
+            .putString("current_time", formatTime(currentMs))
+            .putString("duration", formatTime(durationMs))
+            .putBoolean("is_playing", player.isPlaying)
+            .putString("current_lyric", currentLyric)
+            .putString("next_lyric", nextLyric)
             .apply()
 
-        refreshWidgets()
+        // Sync with Glance state immediately
+        val track = prefs.getString("last_track", "pEQ Station") ?: "pEQ Station"
+        val artist = prefs.getString("last_artist", "Ready for Neural Input") ?: "Ready for Neural Input"
+        val repeatMode = prefs.getInt("repeat_mode", 0)
+        val favorite = prefs.getBoolean("is_favorite", false)
+        val isShuffle = prefs.getBoolean("is_shuffle", false)
+        val queueJson = prefs.getString("queue_json", "[]") ?: "[]"
+        val queue = try { json.decodeFromString<List<String>>(queueJson) } catch (_: Exception) { emptyList() }
+        val bgColor1 = prefs.getInt("bg_color_1", 0xFF08090D.toInt())
+        val bgColor2 = prefs.getInt("bg_color_2", 0xFF8A7DFF.toInt())
+
+        if (shouldRefresh) {
+            serviceScope.launch {
+                try {
+                    org.audiocular.peq.app.widgets.NeuralWidgetStateSync.update(
+                        context = applicationContext,
+                        track = track,
+                        artist = artist,
+                        isPlaying = player.isPlaying,
+                        progress = progress,
+                        currentTime = formatTime(currentMs),
+                        duration = formatTime(durationMs),
+                        repeatMode = repeatMode,
+                        favorite = favorite,
+                        isShuffle = isShuffle,
+                        queue = queue,
+                        bgColor1 = bgColor1,
+                        bgColor2 = bgColor2,
+                        currentLyric = currentLyric,
+                        nextLyric = nextLyric
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
     /*
@@ -779,7 +984,7 @@ class pEQMediaSessionService : MediaSessionService() {
     private fun updateWidgetPlaybackState(
         isPlaying: Boolean
     ) {
-
+        println("pEQControl: [WIDGET_SERVICE] updateWidgetPlaybackState: isPlaying=$isPlaying")
         getSharedPreferences(
             "peq_widget_prefs",
             MODE_PRIVATE
@@ -799,12 +1004,42 @@ class pEQMediaSessionService : MediaSessionService() {
      */
 
     private fun refreshWidgets() {
+        val prefs = getSharedPreferences("peq_widget_prefs", MODE_PRIVATE)
+        val track = prefs.getString("last_track", "pEQ Station") ?: "pEQ Station"
+        val artist = prefs.getString("last_artist", "Ready for Neural Input") ?: "Ready for Neural Input"
+        val isPlaying = prefs.getBoolean("is_playing", false)
+        val progress = prefs.getInt("progress", 0)
+        val currentTime = prefs.getString("current_time", "0:00") ?: "0:00"
+        val duration = prefs.getString("duration", "0:00") ?: "0:00"
+        val repeatMode = prefs.getInt("repeat_mode", 0)
+        val favorite = prefs.getBoolean("is_favorite", false)
+        val isShuffle = prefs.getBoolean("is_shuffle", false)
+        val queueJson = prefs.getString("queue_json", "[]") ?: "[]"
+        val queue = try { json.decodeFromString<List<String>>(queueJson) } catch (_: Exception) { emptyList() }
+        val bgColor1 = prefs.getInt("bg_color_1", 0xFF08090D.toInt())
+        val bgColor2 = prefs.getInt("bg_color_2", 0xFF8A7DFF.toInt())
+        val currentLyric = prefs.getString("current_lyric", "") ?: ""
+        val nextLyric = prefs.getString("next_lyric", "") ?: ""
+
         serviceScope.launch {
             try {
-                NeuralGlanceWidget()
-                    .updateAll(
-                        applicationContext
-                    )
+                org.audiocular.peq.app.widgets.NeuralWidgetStateSync.update(
+                    context = applicationContext,
+                    track = track,
+                    artist = artist,
+                    isPlaying = isPlaying,
+                    progress = progress,
+                    currentTime = currentTime,
+                    duration = duration,
+                    repeatMode = repeatMode,
+                    favorite = favorite,
+                    isShuffle = isShuffle,
+                    queue = queue,
+                    bgColor1 = bgColor1,
+                    bgColor2 = bgColor2,
+                    currentLyric = currentLyric,
+                    nextLyric = nextLyric
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -850,6 +1085,100 @@ class pEQMediaSessionService : MediaSessionService() {
             .getExoPlayer(this)
     }
 
+    private var currentTrackLyrics: List<Pair<Long, String>> = emptyList()
+    private var lastLoadedLyricsPath: String? = null
+
+    private fun loadLyricsForCurrentTrack() {
+        val path = player.currentMediaItem?.localConfiguration?.uri?.toString() ?: return
+        if (path == lastLoadedLyricsPath) return
+        lastLoadedLyricsPath = path
+        currentTrackLyrics = emptyList()
+        
+        try {
+            val persistence = org.audiocular.peq.app.data.getPersistenceManager()
+            val session = persistence.loadSession()
+            val item = session?.queue?.find { it.path == path } 
+                ?: persistence.loadFavorites().find { it == path }?.let { session?.queue?.find { q -> q.path == it } }
+            
+            var lyricsText = item?.lyrics
+            if (lyricsText.isNullOrBlank() && !path.startsWith("http")) {
+                // FALLBACK: Read directly from the file path
+                val normalizedPath = normalizePath(path)
+                try {
+                    val file = java.io.File(normalizedPath)
+                    if (file.exists()) {
+                        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                        lyricsText = audioFile.tag?.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                    }
+                } catch (_: Exception) {}
+
+                if (lyricsText.isNullOrBlank()) {
+                    try {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        retriever.setDataSource(normalizedPath)
+                        lyricsText = retriever.extractMetadata(31) // METADATA_KEY_LYRICS
+                            ?: retriever.extractMetadata(23)
+                            ?: retriever.extractMetadata(101)
+                        retriever.release()
+                    } catch (_: Exception) {}
+                }
+            }
+            if (!lyricsText.isNullOrBlank()) {
+                val lines = mutableListOf<Pair<Long, String>>()
+                for (line in lyricsText.lines()) {
+                    if (line.isBlank()) continue
+                    // Match [mm:ss.xx] or [mm:ss:xx] or [mm:ss]
+                    val regex = "\\[(\\d+):(\\d+)(?:[\\.:](\\d+))?\\](.*)".toRegex()
+                    val match = regex.find(line)
+                    if (match != null) {
+                        val min = match.groupValues[1].toLongOrNull() ?: 0L
+                        val sec = match.groupValues[2].toLongOrNull() ?: 0L
+                        val ms = match.groupValues[3].toLongOrNull() ?: 0L
+                        val text = match.groupValues[4].trim()
+                        val timestamp = (min * 60 * 1000) + (sec * 1000) + (if (ms < 100) ms * 10 else ms)
+                        lines.add(Pair(timestamp, text))
+                    } else if (line.trim().isNotEmpty() && !line.startsWith("[")) {
+                        lines.add(Pair(lines.size * 5000L, line.trim()))
+                    }
+                }
+                currentTrackLyrics = lines.sortedBy { it.first }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistSessionFromService() {
+        try {
+            val persistence = org.audiocular.peq.app.data.getPersistenceManager()
+            val session = persistence.loadSession() ?: org.audiocular.peq.app.data.SessionState()
+            
+            val mediaItem = player.currentMediaItem
+            val path = mediaItem?.localConfiguration?.uri?.toString() ?: session.lastTrackPath
+            val title = mediaItem?.mediaMetadata?.title?.toString() ?: session.lastTrackTitle
+            val artist = mediaItem?.mediaMetadata?.artist?.toString() ?: session.lastTrackArtist
+            val thumbnail = mediaItem?.mediaMetadata?.artworkUri?.toString() ?: session.lastTrackThumbnail
+            
+            val updatedSession = session.copy(
+                lastTrackPath = path,
+                lastTrackTitle = title,
+                lastTrackArtist = artist,
+                lastTrackThumbnail = thumbnail,
+                lastPosition = player.currentPosition,
+                isPlaying = player.isPlaying,
+                isShuffle = player.shuffleModeEnabled,
+                repeatMode = when (player.repeatMode) {
+                    Player.REPEAT_MODE_ONE -> org.audiocular.peq.app.data.RepeatMode.ONE
+                    Player.REPEAT_MODE_ALL -> org.audiocular.peq.app.data.RepeatMode.ALL
+                    else -> org.audiocular.peq.app.data.RepeatMode.OFF
+                }
+            )
+            persistence.saveSession(updatedSession)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     /*
      * destroy
      */
@@ -862,7 +1191,7 @@ class pEQMediaSessionService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-
+        persistSessionFromService()
         stopWidgetProgressUpdater()
 
         mediaSession?.release()

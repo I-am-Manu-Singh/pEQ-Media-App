@@ -52,10 +52,11 @@ fun AppViewModel.restoreSession() {
             } ?: mediaLibrary.value
 
             val resolveItem: (String) -> org.audiocular.peq.app.data.pEQMediaItem? = { path ->
-                _mediaLibrary.value.find { it.path == path } ?: run {
+                val normalized = normalizePath(path)
+                _mediaLibrary.value.find { normalizePath(it.path) == normalized } ?: run {
                     val engineUri = audioEngine.getCurrentTrackUri()
-                    val isCurrentActive = engineUri == path
-                    val isLastPlayed = session.lastTrackPath == path
+                    val isCurrentActive = engineUri != null && normalizePath(engineUri) == normalized
+                    val isLastPlayed = session.lastTrackPath != null && normalizePath(session.lastTrackPath) == normalized
                     
                     if (isCurrentActive || isLastPlayed) {
                         org.audiocular.peq.app.data.pEQMediaItem(
@@ -119,6 +120,11 @@ fun AppViewModel.restoreSession() {
                 
                 currentSampleRate.value = restoredItem.sampleRate ?: 44100
                 currentBitDepth.value = restoredItem.bitDepth ?: 16
+                
+                val index = playbackQueue.indexOfFirst { normalizePath(it.path) == normalizePath(restoredItem.path) }
+                if (index != -1) {
+                    setCurrentQueueIndex(index)
+                }
                 
                 if (activeUri == null && !audioEngine.isPlaying() && audioEngine.getDuration() <= 0L) {
                     audioEngine.loadTrack(restoredItem.path, restoredItem.title, restoredItem.subtitle, restoredItem.thumbnail)
@@ -185,8 +191,13 @@ fun AppViewModel.restoreSession() {
             currentFolderPath.value = path
             showFolders.value = show
             
+            // Sync now playing metadata to widget
+            syncNowPlaying()
+            
         } catch (e: Exception) {
             println("pEQControl: [SYSTEM] Session restore failed: ${e.message}")
+        } finally {
+            completeSplash()
         }
     }
     

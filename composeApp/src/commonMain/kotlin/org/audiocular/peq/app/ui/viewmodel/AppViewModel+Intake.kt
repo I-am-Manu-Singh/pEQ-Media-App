@@ -50,13 +50,20 @@ fun AppViewModel.searchYoutube(query: String) {
     }
 }
 
-fun AppViewModel.fetchStreamFormats(url: String): StreamFormats {
-    // Neural Simulation for now as full parsing requires a lot of overhead
-    // In production this would call cloudDownloader.getFormats(url)
-    return StreamFormats(
-        videoResolutions = listOf("360p", "480p", "720p", "1080p", "4K"),
-        audioQualities = listOf("128kbps", "192kbps", "256kbps", "320kbps", "FLAC")
-    )
+fun AppViewModel.loadLinkFormats(url: String) {
+    if (url.isBlank()) return
+    isFetchingFormats.value = true
+    scope.launch {
+        try {
+            availableFormats.clear()
+            val formats = cloudDownloader?.getFormats(url) ?: emptyList()
+            availableFormats.addAll(formats)
+        } catch (e: Exception) {
+            availableFormats.clear()
+        } finally {
+            isFetchingFormats.value = false
+        }
+    }
 }
 
 val AppViewModel.downloadQueue: SnapshotStateList<DownloadJob>
@@ -71,7 +78,8 @@ fun AppViewModel.startMediaDownload(
     highQuality: Boolean,
     autoQueue: Boolean,
     resolution: String,
-    audioQuality: String
+    audioQuality: String,
+    formatId: String? = null
 ) {
     scope.launch {
         val jobId = "dl_${url.hashCode()}_${Clock.System.now().toEpochMilliseconds()}"
@@ -94,8 +102,10 @@ fun AppViewModel.startMediaDownload(
             updateDownloadStatus(jobId, "CONNECTING...", 0.05f)
             delay(1000)
             
-            cloudDownloader?.downloadAudio(
+            cloudDownloader?.downloadMedia(
                 url = url,
+                formatId = formatId,
+                isAudioOnly = audioOnly,
                 onProgress = { progress, eta ->
                     updateDownloadStatus(jobId, "DOWNLOADING...", progress / 100f, eta)
                 },
@@ -181,3 +191,13 @@ fun AppViewModel.addStreamUrl(url: String, type: MediaType) {
         playMediaItem(item)
     }
 }
+
+fun AppViewModel.deleteDownloadedJob(job: DownloadJob) {
+    job.filePath?.let { path ->
+        org.audiocular.peq.app.deleteLocalFile(path)
+    }
+    _downloadQueue.remove(job)
+    showToast("Media Deleted: ${job.title}")
+    refreshLibrary()
+}
+

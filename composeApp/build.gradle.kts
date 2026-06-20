@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.Properties
 
 plugins {
 
@@ -148,13 +149,13 @@ kotlin {
                     "androidx.work:work-runtime-ktx:2.9.0"
                 )
 
-             implementation(
-    "com.github.yausername.youtubedl-android:library:0.14.0"
-)
+                implementation(
+                    "io.github.junkfood02.youtubedl-android:library:0.18.1"
+                )
 
-implementation(
-    "com.github.yausername.youtubedl-android:ffmpeg:0.14.0"
-)
+                implementation(
+                    "io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1"
+                )
 
                 implementation(
                     "com.google.android.gms:play-services-cast-framework:21.4.0"
@@ -174,6 +175,10 @@ implementation(
 
                 implementation(
                     libs.glance.material3
+                )
+
+                implementation(
+                    "net.jthink:jaudiotagger:3.0.1"
                 )
             }
         }
@@ -325,7 +330,7 @@ android {
 
         versionCode = 1
 
-        versionName = "1.0"
+        versionName = "1.0.0"
     }
 
     packaging {
@@ -342,11 +347,39 @@ android {
         }
     }
 
+    val localProps = Properties().apply {
+        val locFile = rootProject.file("local.properties")
+        if (locFile.exists()) {
+            locFile.inputStream().use { load(it) }
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val keyPath = localProps["RELEASE_KEYSTORE_PATH"] as? String ?: ""
+            if (keyPath.isNotEmpty()) {
+                storeFile = file(keyPath)
+                storePassword = localProps["RELEASE_STORE_PASSWORD"] as? String ?: ""
+                keyAlias = localProps["RELEASE_KEY_ALIAS"] as? String ?: ""
+                keyPassword = localProps["RELEASE_KEY_PASSWORD"] as? String ?: ""
+            }
+        }
+    }
+
     buildTypes {
 
         getByName("release") {
 
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            val keyPath = localProps["RELEASE_KEYSTORE_PATH"] as? String ?: ""
+            if (keyPath.isNotEmpty()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -456,6 +489,47 @@ compose.desktop {
 
                 minimumSystemVersion =
                     "12.0"
+
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>CFBundleDocumentTypes</key>
+                        <array>
+                            <dict>
+                                <key>CFBundleTypeRole</key>
+                                <string>Viewer</string>
+                                <key>LSHandlerRank</key>
+                                <string>Alternate</string>
+                                <key>CFBundleTypeName</key>
+                                <string>Audio File</string>
+                                <key>CFBundleTypeExtensions</key>
+                                <array>
+                                    <string>mp3</string>
+                                    <string>flac</string>
+                                    <string>wav</string>
+                                    <string>m4a</string>
+                                    <string>ogg</string>
+                                    <string>aac</string>
+                                </array>
+                            </dict>
+                            <dict>
+                                <key>CFBundleTypeRole</key>
+                                <string>Viewer</string>
+                                <key>LSHandlerRank</key>
+                                <string>Alternate</string>
+                                <key>CFBundleTypeName</key>
+                                <string>Video File</string>
+                                <key>CFBundleTypeExtensions</key>
+                                <array>
+                                    <string>mp4</string>
+                                    <string>mkv</string>
+                                    <string>mov</string>
+                                    <string>avi</string>
+                                    <string>webm</string>
+                                </array>
+                            </dict>
+                        </array>
+                    """.trimIndent()
+                }
             }
         }
     }

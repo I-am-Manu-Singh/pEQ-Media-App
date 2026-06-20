@@ -107,8 +107,8 @@ fun AudioVinylEngine(
             modifier = Modifier
                 .size(vinylContainerSize)
                 .graphicsLayer {
-                    rotationX = 22f
-                    rotationY = -14f
+                    rotationX = 0f
+                    rotationY = 0f
                     cameraDistance = 16f
                 },
             contentAlignment = Alignment.Center

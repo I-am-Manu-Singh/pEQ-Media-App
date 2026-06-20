@@ -1593,13 +1593,21 @@ class AndroidAudioEngine(
                             val rawName = fileName.substringBeforeLast(".").uppercase()
                             val label = rawName.replace(" ", "-").replace("_", "-")
                             
-                            // Determine Kit from prefix or fallback to 'NEURAL'
+                            // Determine Kit from prefix/contents or fallback to hash-based distribution
                             val kitKey = when {
-                                label.startsWith("808") -> "NEURAL"
-                                label.startsWith("GRIME") -> "INDUSTRIAL"
-                                label.startsWith("LOFI") -> "LOFI"
-                                label.startsWith("RETRO") -> "RETRO"
-                                else -> "NEURAL"
+                                label.contains("808") -> "NEURAL"
+                                label.contains("GRIME") || label.contains("INDUSTRIAL") || label.contains("DEVASTATE") || label.contains("TEKK") -> "INDUSTRIAL"
+                                label.contains("LOFI") || label.contains("VINYL") || label.contains("TAPE") || label.contains("CASSETTE") -> "LOFI"
+                                label.contains("RETRO") || label.contains("JUNO") || label.contains("CHIP") || label.contains("ANALOG") || label.contains("USSR") -> "RETRO"
+                                else -> {
+                                    val hash = label.hashCode().let { if (it < 0) -it else it }
+                                    when (hash % 4) {
+                                        0 -> "NEURAL"
+                                        1 -> "INDUSTRIAL"
+                                        2 -> "LOFI"
+                                        else -> "RETRO"
+                                    }
+                                }
                             }
                             
                             val kitMap = kitSounds.getOrPut(kitKey) { mutableMapOf() }
@@ -1788,85 +1796,66 @@ class AndroidAudioEngine(
             ) {
 
                 try {
-
                     val cleanPath = cleanLocalPath(currentMediaUri)
-                    val file =
-                        java.io.File(cleanPath)
-
-                    // LRC SIDE CAR
-
-                    val lrcFile =
-                        java.io.File(
-                            file.parent,
-                            "${file.nameWithoutExtension}.lrc"
-                        )
-
-                    if (lrcFile.exists()) {
-
-                        lyrics +=
-                            lrcFile.readLines()
-                                .mapNotNull {
-                                    parseLrcLine(it)
-                                }
+                    if (!cleanPath.startsWith("content://")) {
+                        try {
+                            val file = java.io.File(cleanPath)
+                            val lrcFile = java.io.File(file.parent, "${file.nameWithoutExtension}.lrc")
+                            if (lrcFile.exists()) {
+                                lyrics += lrcFile.readLines().mapNotNull { parseLrcLine(it) }
+                            }
+                        } catch (_: Exception) {}
                     }
 
                     // EMBEDDED METADATA
-
                     if (lyrics.isEmpty()) {
-
-                        val retriever =
-                            MediaMetadataRetriever()
-
-                        retriever.setDataSource(
-                            cleanPath
-                        )
-
-                        val rawLyrics = try {
-                            retriever.extractMetadata(23) // METADATA_KEY_LYRICS
-                                ?: retriever.extractMetadata(4) // METADATA_KEY_COMMENT
-                                ?: retriever.extractMetadata(13) // METADATA_KEY_ICU
-                                ?: retriever.extractMetadata(101) // Custom frame often used for lyrics
-                        } catch (_: Exception) {
-                            null
+                        var rawLyrics: String? = null
+                        if (!cleanPath.startsWith("content://") && !cleanPath.startsWith("http")) {
+                            try {
+                                val file = java.io.File(cleanPath)
+                                if (file.exists()) {
+                                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                                    val tag = audioFile.tag
+                                    if (tag != null) {
+                                        rawLyrics = tag.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                                    }
+                                }
+                            } catch (_: Exception) {}
                         }
 
-                        retriever.release()
+                        if (rawLyrics.isNullOrBlank()) {
+                            val retriever = MediaMetadataRetriever()
+                            try {
+                                if (cleanPath.startsWith("content://")) {
+                                    retriever.setDataSource(context, android.net.Uri.parse(cleanPath))
+                                } else {
+                                    retriever.setDataSource(cleanPath)
+                                }
+                                rawLyrics = retriever.extractMetadata(31) // METADATA_KEY_LYRICS
+                                    ?: retriever.extractMetadata(23)
+                                    ?: retriever.extractMetadata(4) // METADATA_KEY_COMMENT
+                                    ?: retriever.extractMetadata(13) // METADATA_KEY_ICU
+                                    ?: retriever.extractMetadata(101) // Custom frame often used for lyrics
+                            } catch (_: Exception) {
+                            } finally {
+                                retriever.release()
+                            }
+                        }
 
                         if (!rawLyrics.isNullOrBlank()) {
-
-                            val parsed =
-                                rawLyrics.lines()
-                                    .mapNotNull {
-                                        parseLrcLine(it)
-                                    }
-
-                            if (
-                                parsed.all {
-                                    it.timestampMs == 0L
-                                } &&
-                                parsed.size > 1
-                            ) {
-
-                                val safeDuration =
-                                    duration.coerceAtLeast(1L)
-
-                                val interval =
-                                    safeDuration / parsed.size
-
+                            val parsed = rawLyrics.lines().mapNotNull { parseLrcLine(it) }
+                            if (parsed.all { it.timestampMs == 0L } && parsed.size > 1) {
+                                val safeDuration = duration.coerceAtLeast(1L)
+                                val interval = safeDuration / parsed.size
                                 lyrics += parsed.mapIndexed { index, line ->
-
-                                    line.copy(
-                                        timestampMs =
-                                            index * interval
-                                    )
+                                    line.copy(timestampMs = index * interval)
                                 }
-
                             } else {
-
                                 lyrics += parsed
                             }
                         }
                     }
+
 
                 } catch (e: Exception) {
 
@@ -1887,60 +1876,26 @@ class AndroidAudioEngine(
                 currentMediaUri != null &&
                 !currentMediaUri.startsWith("http")
             ) {
-
                 try {
-
                     val cleanPath = cleanLocalPath(currentMediaUri)
-                    val file =
-                        java.io.File(cleanPath)
-
-                    val chapterFile =
-                        java.io.File(
-                            file.parent,
-                            "${file.nameWithoutExtension}.chapters"
-                        )
-
-                    if (chapterFile.exists()) {
-
-                        chapters +=
-                            chapterFile.readLines()
-                                .mapNotNull { line ->
-
-                                    val parts =
-                                        line.split("|")
-
-                                    if (parts.size >= 2) {
-
-                                        MediaChapter(
-                                            title = parts[0],
-
-                                            startMs =
-                                                parts[1]
-                                                    .toLongOrNull()
-                                                    ?: 0L,
-
-                                            endMs =
-                                                parts.getOrNull(2)
-                                                    ?.toLongOrNull()
-
-                                                    ?: (
-                                                            (
-                                                                    parts[1]
-                                                                        .toLongOrNull()
-                                                                        ?: 0L
-                                                                    ) + 5000L
-                                                            )
-                                        )
-
-                                    } else null
-                                }
+                    if (!cleanPath.startsWith("content://")) {
+                        val file = java.io.File(cleanPath)
+                        val chapterFile = java.io.File(file.parent, "${file.nameWithoutExtension}.chapters")
+                        if (chapterFile.exists()) {
+                            chapters += chapterFile.readLines().mapNotNull { line ->
+                                val parts = line.split("|")
+                                if (parts.size >= 2) {
+                                    MediaChapter(
+                                        title = parts[0],
+                                        startMs = parts[1].toLongOrNull() ?: 0L,
+                                        endMs = parts.getOrNull(2)?.toLongOrNull() ?: ((parts[1].toLongOrNull() ?: 0L) + 5000L)
+                                    )
+                                } else null
+                            }
+                        }
                     }
-
                 } catch (e: Exception) {
-
-                    println(
-                        "pEQControl: Chapter extraction failed ${e.message}"
-                    )
+                    println("pEQControl: Chapter extraction failed ${e.message}")
                 }
             }
 
@@ -2078,7 +2033,30 @@ class AndroidAudioEngine(
     override fun togglePhaseInversion(enabled: Boolean) { setPhaseInversion(enabled) }
     
     override suspend fun saveEmbeddedLyrics(url: String, lyrics: List<SyncedLine>) {
-        saveSidecarFile(url, "lrc", lyrics.joinToString("\n") { "[${formatTimeLrc(it.timestampMs)}] ${it.text}" })
+        withContext(Dispatchers.IO) {
+            val lyricsText = lyrics.joinToString("\n") { 
+                if (it.timestampMs > 0L) "[${formatTimeLrc(it.timestampMs)}] ${it.text}" else it.text 
+            }
+            try {
+                if (!url.startsWith("content://") && !url.startsWith("http")) {
+                    val file = java.io.File(url)
+                    if (file.exists()) {
+                        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                        var tag = audioFile.tag
+                        if (tag == null) {
+                            tag = audioFile.createDefaultTag()
+                            audioFile.tag = tag
+                        }
+                        tag.setField(org.jaudiotagger.tag.FieldKey.LYRICS, lyricsText)
+                        audioFile.commit()
+                        println("pEQControl: [Android] Embedded lyrics successfully saved to file via jaudiotagger: $url")
+                    }
+                }
+            } catch (e: Exception) {
+                println("pEQControl: [Android] Failed to embed lyrics in file: ${e.message}")
+            }
+            saveSidecarFile(url, "lrc", lyricsText)
+        }
     }
 
     override suspend fun saveEmbeddedChapters(url: String, chapters: List<MediaChapter>) {

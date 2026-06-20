@@ -54,16 +54,29 @@ actual fun pEQImage(
                         val uri = Uri.parse(source)
                         try {
                             context.contentResolver.openInputStream(uri)?.use { stream ->
-                                return BitmapFactory.decodeStream(stream)
+                                // Note: We only return if it successfully decoded a bitmap (i.e. is actually an image stream)
+                                val bmp = BitmapFactory.decodeStream(stream)
+                                if (bmp != null) return bmp
                             }
                         } catch (_: Exception) {}
                         
-                        if (source.contains("video")) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                try {
-                                    return context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
-                                } catch (_: Exception) {}
+                        try {
+                            val retriever = MediaMetadataRetriever()
+                            retriever.setDataSource(context, uri)
+                            val art = retriever.embeddedPicture
+                            if (art != null) {
+                                return BitmapFactory.decodeByteArray(art, 0, art.size)
                             }
+                            val isVideo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != null
+                            if (isVideo) {
+                                return retriever.getFrameAtTime(1000000)
+                            }
+                        } catch (_: Exception) {}
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            try {
+                                return context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                            } catch (_: Exception) {}
                         }
                     } else {
                         val cleaned = source.replace("file://", "")

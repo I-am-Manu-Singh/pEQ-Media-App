@@ -149,13 +149,7 @@ fun PlayerScreen(
             PlayerQueueDrawer(viewModel) { viewModel.showQueueDrawer.value = false }
         }
 
-        AnimatedVisibility(visible = viewModel.isPlaylistPickerShown.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(30f)) {
-            PlaylistPicker(viewModel) { viewModel.isPlaylistPickerShown.value = false }
-        }
 
-        AnimatedVisibility(visible = viewModel.showTrackInfoSheet.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(40f)) {
-            TrackInfoBottomSheet(item = currentItem, viewModel = viewModel, onDismiss = { viewModel.showTrackInfoSheet.value = false })
-        }
 
         AnimatedVisibility(
             visible = viewModel.showSleepTimerSheet.value,
@@ -187,16 +181,27 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(visible = viewModel.showSubtitleConsole.value, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(70f)) {
+            val noneTrack = remember { org.audiocular.peq.app.data.MediaTrack(id = "none", language = "Disable Subtitles", type = org.audiocular.peq.app.data.TrackType.SUBTITLE, codec = "None") }
+            val subtitleItems = remember(viewModel.availableSubtitleTracks.size) {
+                listOf(noneTrack) + viewModel.availableSubtitleTracks
+            }
             MediaSelectionSheet(
                 title = "SUBTITLES",
-                items = viewModel.availableSubtitleTracks,
-                selectedItem = viewModel.selectedSubtitleTrack.value,
+                items = subtitleItems,
+                selectedItem = viewModel.selectedSubtitleTrack.value ?: noneTrack,
                 isLoading = viewModel.isFetchingSubtitles.value,
                 emptyIcon = Icons.Default.Subtitles,
                 emptyTitle = "No subtitles detected",
                 emptyMessage = "Embedded subtitle tracks will appear here.",
                 onClose = { viewModel.showSubtitleConsole.value = false },
-                onItemClick = { viewModel.switchSubtitle(it) },
+                onItemClick = { track ->
+                    if (track.id == "none" || viewModel.selectedSubtitleTrack.value == track) {
+                        viewModel.switchSubtitle(null)
+                    } else {
+                        viewModel.switchSubtitle(track)
+                    }
+                    viewModel.showSubtitleConsole.value = false
+                },
                 onOnlineSearch = { viewModel.fetchSubtitles(autoOpenEditor = true) },
                 onPickFile = { viewModel.requestSubtitlePicker() },
                 itemKey = { it.id },
@@ -326,524 +331,446 @@ fun TrackInfoBottomSheet(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
+    val isVideo = item.type == MediaType.VIDEO
+    val isAudio = item.type == MediaType.AUDIO
 
-    val isVideo =
-        item.type == MediaType.VIDEO
-
-    val isAudio =
-        item.type == MediaType.AUDIO
+    val editTitle = remember(item) { mutableStateOf(item.title) }
+    val editArtist = remember(item) { mutableStateOf(item.artist ?: "") }
+    val editAlbum = remember(item) { mutableStateOf(item.album ?: "") }
+    val editAlbumArtist = remember(item) { mutableStateOf(item.albumArtist ?: "") }
+    val editGenre = remember(item) { mutableStateOf(item.genre ?: "") }
+    val editComposer = remember(item) { mutableStateOf(item.composer ?: "") }
+    val editTrackNumber = remember(item) { mutableStateOf(if (item.trackNumber != null && item.trackNumber > 0) item.trackNumber.toString() else "") }
+    val editDiscNumber = remember(item) { mutableStateOf(if (item.discNumber != null && item.discNumber > 0) item.discNumber.toString() else "") }
+    val editYear = remember(item) { mutableStateOf(if (item.year != null && item.year > 0) item.year.toString() else "") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-
-        containerColor =
-            MaterialTheme.colorScheme.surface,
-
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
-
             BottomSheetDefaults.DragHandle(
-                color =
-                    MaterialTheme.colorScheme
-                        .onSurfaceVariant
-                        .copy(alpha = 0.4f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
         }
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .verticalScroll(
-                    rememberScrollState()
-                )
-                .padding(
-                    horizontal = 20.dp,
-                    vertical = 14.dp
-                )
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 14.dp)
         ) {
-
             // =========================
             // HEADER
             // =========================
-
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-
-                shape =
-                    RoundedCornerShape(28.dp),
-
-                color =
-                    MaterialTheme.colorScheme
-                        .surfaceContainerHighest
-                        .copy(alpha = 0.55f),
-
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
                 tonalElevation = 4.dp
             ) {
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(18.dp),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
                     Box(
                         modifier = Modifier
                             .size(58.dp)
                             .clip(CircleShape)
-                            .background(
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary
-                                    .copy(alpha = 0.14f)
-                            ),
-
-                        contentAlignment =
-                            Alignment.Center
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
                     ) {
-
                         pEQImage(data = item.thumbnail, fallbackPath = item.path, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                     }
-
-                    Spacer(
-                        Modifier.width(16.dp)
-                    )
-
-                    Column(
-                        modifier = Modifier.weight(1f)
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title.ifBlank { "Unknown Title" },
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = item.artist ?: "Unknown Artist",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-
-                        item.title
-                    .takeIf {
-                        it.isNotBlank()
-                    }
-                    ?.let {
-
-                        EnhancedInfoRow(
-                            icon = Icons.Default.MusicNote,
-                            label = "Title",
-                            value = it
-                        )
-                    }
-
-                        Spacer(
-                            Modifier.height(4.dp)
-                        )
-
-                          item.artist
-                            ?.takeIf {
-                                it.isNotBlank()
+                        IconButton(
+                            onClick = {
+                                viewModel.isEditingMetadata.value = !viewModel.isEditingMetadata.value
                             }
-                            ?.let {
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Info",
+                                tint = if (viewModel.isEditingMetadata.value) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.clearPlaybackHistory()
+                                onDismiss()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteSweep,
+                                contentDescription = "Clear History",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
 
-                                EnhancedInfoRow(
-                                    icon = Icons.Default.Person,
-                                    label = "Artist",
-                                    value = it
+            Spacer(Modifier.height(20.dp))
+
+            if (viewModel.isEditingMetadata.value) {
+                EnhancedInfoSection(
+                    title = "EDIT TRACK DETAILS",
+                    icon = Icons.Default.Edit
+                ) {
+                    OutlinedTextField(
+                        value = editTitle.value,
+                        onValueChange = { editTitle.value = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editArtist.value,
+                        onValueChange = { editArtist.value = it },
+                        label = { Text("Artist") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editAlbum.value,
+                        onValueChange = { editAlbum.value = it },
+                        label = { Text("Album") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editAlbumArtist.value,
+                        onValueChange = { editAlbumArtist.value = it },
+                        label = { Text("Album Artist") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editGenre.value,
+                        onValueChange = { editGenre.value = it },
+                        label = { Text("Genre") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editComposer.value,
+                        onValueChange = { editComposer.value = it },
+                        label = { Text("Composer") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = editTrackNumber.value,
+                            onValueChange = { editTrackNumber.value = it },
+                            label = { Text("Track No.") },
+                            modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = editDiscNumber.value,
+                            onValueChange = { editDiscNumber.value = it },
+                            label = { Text("Disc No.") },
+                            modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                    OutlinedTextField(
+                        value = editYear.value,
+                        onValueChange = { editYear.value = it },
+                        label = { Text("Year") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FilledTonalButton(
+                            onClick = { viewModel.isEditingMetadata.value = false },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                viewModel.updateMetadata(
+                                    item = item,
+                                    newTitle = editTitle.value,
+                                    newArtist = editArtist.value,
+                                    newAlbum = editAlbum.value,
+                                    newAlbumArtist = editAlbumArtist.value,
+                                    newGenre = editGenre.value,
+                                    newComposer = editComposer.value,
+                                    newTrackNumber = editTrackNumber.value.toIntOrNull() ?: 0,
+                                    newDiscNumber = editDiscNumber.value.toIntOrNull() ?: 0,
+                                    newYear = editYear.value.toIntOrNull() ?: 0
                                 )
-                            }
+                                viewModel.isEditingMetadata.value = false
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("Save")
+                        }
                     }
                 }
-            }
+            } else {
+                // =========================
+                // BASIC INFO
+                // =========================
+                EnhancedInfoSection(
+                    title = if (isVideo) "VIDEO INFO" else "SONG INFO",
+                    icon = Icons.Default.Info
+                ) {
+                    EnhancedInfoRow(
+                        icon = Icons.Default.Description,
+                        label = "File Name",
+                        value = item.fileName
+                    )
 
-            Spacer(
-                Modifier.height(20.dp)
-            )
-
-            // =========================
-            // BASIC INFO
-            // =========================
-
-            EnhancedInfoSection(
-                title =
-                    if (isVideo)
-                        "VIDEO INFO"
-                    else
-                        "SONG INFO",
-
-                icon = Icons.Default.Info
-            ) {
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.Description,
-                    label = "File Name",
-                    value = item.fileName
-                )
-
-////                item.title
-////                    .takeIf {
-////                        it.isNotBlank()
-////                    }
-////                    ?.let {
-////
-////                        EnhancedInfoRow(
-////                            icon = Icons.Default.MusicNote,
-////                            label = "Title",
-////                            value = it
-////                        )
-////                    }
-//
-//                item.artist
-//                    ?.takeIf {
-//                        it.isNotBlank()
-//                    }
-//                    ?.let {
-//
-//                        EnhancedInfoRow(
-//                            icon = Icons.Default.Person,
-//                            label = "Artist",
-//                            value = it
-//                        )
-//                    }
-
-                if (isAudio) {
-
-                    item.album
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let {
-
+                    if (isAudio) {
+                        item.album?.takeIf { it.isNotBlank() }?.let {
                             EnhancedInfoRow(
-                                icon =
-                                    Icons.Default
-                                        .Album,
-
+                                icon = Icons.Default.Album,
                                 label = "Album",
-
                                 value = it
                             )
                         }
-
-                    item.genre
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let {
-
+                        item.albumArtist?.takeIf { it.isNotBlank() }?.let {
                             EnhancedInfoRow(
-                                icon =
-                                    Icons.Default
-                                        .LibraryMusic,
-
+                                icon = Icons.Default.PersonOutline,
+                                label = "Album Artist",
+                                value = it
+                            )
+                        }
+                        item.genre?.takeIf { it.isNotBlank() }?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.LibraryMusic,
                                 label = "Genre",
-
                                 value = it
                             )
                         }
-
-                    item.composer
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let {
-
+                        item.composer?.takeIf { it.isNotBlank() }?.let {
                             EnhancedInfoRow(
-                                icon =
-                                    Icons.Default
-                                        .EditNote,
-
+                                icon = Icons.Default.EditNote,
                                 label = "Composer",
-
                                 value = it
                             )
                         }
-
-                    item.year
-                        ?.takeIf {
-                            it > 0
-                        }
-                        ?.let {
-
+                        item.trackNumber?.takeIf { it > 0 }?.let {
                             EnhancedInfoRow(
-                                icon =
-                                    Icons.Default
-                                        .CalendarMonth,
-
-                                label = "Year",
-
-                                value =
-                                    it.toString()
+                                icon = Icons.Default.Numbers,
+                                label = "Track Number",
+                                value = it.toString()
                             )
                         }
+                        item.discNumber?.takeIf { it > 0 }?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.Layers,
+                                label = "Disc Number",
+                                value = it.toString()
+                            )
+                        }
+                        item.year?.takeIf { it > 0 }?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.CalendarMonth,
+                                label = "Year",
+                                value = it.toString()
+                            )
+                        }
+                    }
+
+                    EnhancedInfoRow(
+                        icon = Icons.Default.Folder,
+                        label = "Folder",
+                        value = item.path.substringBeforeLast("/", "Internal Storage")
+                    )
                 }
 
-                EnhancedInfoRow(
-                    icon = Icons.Default.Folder,
+                Spacer(Modifier.height(18.dp))
 
-                    label = "Folder",
-
-                    value =
-                        item.path.substringBeforeLast(
-                            "/",
-                            "Internal Storage"
-                        )
-                )
-            }
-
-            Spacer(
-                Modifier.height(18.dp)
-            )
-
-            // =========================
-            // TECHNICAL
-            // =========================
-
-            EnhancedInfoSection(
-                title = "TECHNICAL DETAILS",
-
-                icon =
-                    Icons.Default.Memory
-            ) {
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.Timer,
-
-                    label = "Duration",
-
-                    value =
-                        formatTime(
-                            item.durationMs
-                        )
-                )
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.AudioFile,
-
-                    label = "Format",
-
-                    value = item.format
-                )
-
-                item.codec
-                    ?.takeIf {
-                        it.isNotBlank()
+                // =========================
+                // NEURAL & AUDIO CHARACTERISTICS
+                // =========================
+                if (item.bpm != null || !item.key.isNullOrBlank()) {
+                    EnhancedInfoSection(
+                        title = "NEURAL CHARACTERISTICS",
+                        icon = Icons.Default.Bolt
+                    ) {
+                        item.bpm?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.Speed,
+                                label = "Neural BPM",
+                                value = "${it.toInt()} BPM"
+                            )
+                        }
+                        item.key?.takeIf { it.isNotBlank() }?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.Key,
+                                label = "Musical Key",
+                                value = it
+                            )
+                        }
                     }
-                    ?.let {
+                    Spacer(Modifier.height(18.dp))
+                }
 
+                // =========================
+                // TECHNICAL
+                // =========================
+                EnhancedInfoSection(
+                    title = "TECHNICAL DETAILS",
+                    icon = Icons.Default.Memory
+                ) {
+                    EnhancedInfoRow(
+                        icon = Icons.Default.Timer,
+                        label = "Duration",
+                        value = formatTime(item.durationMs)
+                    )
+                    EnhancedInfoRow(
+                        icon = Icons.Default.AudioFile,
+                        label = "Format",
+                        value = item.format
+                    )
+                    EnhancedInfoRow(
+                        icon = Icons.Default.CloudQueue,
+                        label = "Stream Type",
+                        value = if (item.isStream || item.path.startsWith("http")) "Online Web Stream" else "Local Storage File"
+                    )
+
+                    item.codec?.takeIf { it.isNotBlank() }?.let {
                         EnhancedInfoRow(
-                            icon =
-                                Icons.Default
-                                    .SettingsInputHdmi,
-
+                            icon = Icons.Default.SettingsInputHdmi,
                             label = "Codec",
-
                             value = it
                         )
                     }
 
-                if (item.bitrate > 0) {
-
-                    EnhancedInfoRow(
-                        icon =
-                            Icons.Default
-                                .Speed,
-
-                        label = "Bitrate",
-
-                        value =
-                            "${item.bitrate} kbps"
-                    )
-                }
-
-                if (isAudio) {
-
-                    if (item.sampleRate > 0) {
-
+                    if (item.bitrate > 0) {
                         EnhancedInfoRow(
-                            icon =
-                                Icons.Default
-                                    .Equalizer,
-
-                            label =
-                                "Sample Rate",
-
-                            value =
-                                "${item.sampleRate} Hz"
+                            icon = Icons.Default.Speed,
+                            label = "Bitrate",
+                            value = "${item.bitrate} kbps"
                         )
                     }
 
-                    if (item.bitDepth > 0) {
-
+                    if (isAudio) {
                         EnhancedInfoRow(
-                            icon =
-                                Icons.Default
-                                    .DataObject,
-
-                            label =
-                                "Bit Depth",
-
-                            value =
-                                "${item.bitDepth} bit"
+                            icon = Icons.Default.HighQuality,
+                            label = "Audio Quality",
+                            value = if (item.isHiRes) "Hi-Res Audio" else if (item.isLossless) "Lossless CD Quality" else "Standard Compressed"
                         )
-                    }
-
-                    if (item.channels > 0) {
-
-                        EnhancedInfoRow(
-                            icon =
-                                Icons.Default
-                                    .SurroundSound,
-
-                            label =
-                                "Channels",
-
-                            value =
-                                item.channels
-                                    .toString()
-                        )
-                    }
-                }
-
-                if (isVideo) {
-
-                    item.resolution
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let {
-
+                        if (item.sampleRate > 0) {
                             EnhancedInfoRow(
-                                icon =
-                                    Icons.Default
-                                        .AspectRatio,
+                                icon = Icons.Default.Equalizer,
+                                label = "Sample Rate",
+                                value = "${item.sampleRate} Hz"
+                            )
+                        }
+                        if (item.bitDepth > 0) {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.DataObject,
+                                label = "Bit Depth",
+                                value = "${item.bitDepth} bit"
+                            )
+                        }
+                        if (item.channels > 0) {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.SurroundSound,
+                                label = "Channels",
+                                value = if (item.channels == 1) "1 (Mono)" else if (item.channels == 2) "2 (Stereo)" else "${item.channels} Channels"
+                            )
+                        }
+                    }
 
-                                label =
-                                    "Resolution",
-
+                    if (isVideo) {
+                        item.resolution?.takeIf { it.isNotBlank() }?.let {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.AspectRatio,
+                                label = "Resolution",
                                 value = it
                             )
                         }
-
-                    if (item.frameRate > 0f) {
-
-                        EnhancedInfoRow(
-                            icon =
-                                Icons.Default
-                                    .SlowMotionVideo,
-
-                            label =
-                                "Frame Rate",
-
-                            value =
-                                "${item.frameRate.toInt()} FPS"
-                        )
+                        if (item.frameRate > 0f) {
+                            EnhancedInfoRow(
+                                icon = Icons.Default.SlowMotionVideo,
+                                label = "Frame Rate",
+                                value = "${item.frameRate.toInt()} FPS"
+                            )
+                        }
                     }
-                }
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.Storage,
-
-                    label = "File Size",
-
-                    value = item.displaySize
-                )
-            }
-
-            Spacer(
-                Modifier.height(18.dp)
-            )
-
-            // =========================
-            // LIBRARY
-            // =========================
-
-            EnhancedInfoSection(
-                title = "LIBRARY",
-                icon = Icons.Default.LibraryBooks
-            ) {
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.AccessTime,
-                    label = "Added",
-                    value = formatDate(item.dateAdded * 1000L)
-                )
-
-                EnhancedInfoRow(
-                    icon = Icons.Default.Update,
-                    label = "Modified",
-                    value = formatDate(item.dateModified * 1000L)
-                )
-
-                if (item.lastPlayed > 0) {
 
                     EnhancedInfoRow(
-                        icon = Icons.Default.History,
-                        label = "Last Played",
-                        value = formatDate(item.lastPlayed * 1000L)
+                        icon = Icons.Default.Storage,
+                        label = "File Size",
+                        value = item.displaySize
                     )
                 }
 
-                if (item.playCount > 0) {
+                Spacer(Modifier.height(18.dp))
+
+                // =========================
+                // LIBRARY
+                // =========================
+                EnhancedInfoSection(
+                    title = "LIBRARY",
+                    icon = Icons.Default.LibraryBooks
+                ) {
+                    EnhancedInfoRow(
+                        icon = Icons.Default.AccessTime,
+                        label = "Added",
+                        value = formatDate(item.dateAdded)
+                    )
+                    EnhancedInfoRow(
+                        icon = Icons.Default.Update,
+                        label = "Modified",
+                        value = formatDate(item.dateModified)
+                    )
+
+                    if (item.lastPlayed > 0) {
+                        EnhancedInfoRow(
+                            icon = Icons.Default.History,
+                            label = "Last Played",
+                            value = formatDate(item.lastPlayed)
+                        )
+                    }
 
                     EnhancedInfoRow(
                         icon = Icons.Default.PlayArrow,
-                        label = "Play Count",
-                        value = item.playCount.toString()
+                        label = "Times Played",
+                        value = "${item.playCount} times"
                     )
                 }
             }
 
-            Spacer(
-                Modifier.height(28.dp)
-            )
-
-            // =========================
-            // ACTION BUTTON
-            // =========================
-
-            FilledTonalButton(
-                onClick = {
-
-                    viewModel
-                        .clearPlaybackHistory()
-
-                    onDismiss()
-                },
-
-                modifier = Modifier
-                    .height(56.dp),
-
-                shape =
-                    RoundedCornerShape(18.dp),
-
-                colors =
-                    ButtonDefaults
-                        .filledTonalButtonColors(
-
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .errorContainer
-                        )
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.DeleteSweep,
-
-                    contentDescription = null
-                )
-
-                Spacer(
-                    Modifier.width(10.dp)
-                )
-
-                Text(
-                    text =
-                        "CLEAR PLAYBACK HISTORY",
-
-                    fontWeight =
-                        FontWeight.Bold
-                )
-            }
-
-            Spacer(
-                Modifier.height(22.dp)
-            )
+            Spacer(Modifier.height(22.dp))
         }
     }
 }

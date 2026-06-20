@@ -1235,87 +1235,70 @@ fun MainScreen(
                                     )
                             ) {
 
-                                if (viewModel.showDrumLibrary.value) {
+                                AnimatedContent(
+                                    targetState = currentTab,
 
-    DrumLibrary(viewModel)
+                                    transitionSpec = {
 
-} else {
+                                        fadeIn(
+                                            tween(220)
+                                        ).togetherWith(
 
-    AnimatedContent(
-        targetState = currentTab,
+                                            fadeOut(
+                                                tween(160)
+                                            )
+                                        )
+                                    },
 
-        transitionSpec = {
+                                    label = "main_content"
+                                ) { tab ->
 
-            fadeIn(
-                tween(220)
-            ).togetherWith(
+                                    when (tab) {
 
-                fadeOut(
-                    tween(160)
-                )
-            )
-        },
+                                        Tab.Dashboard -> {
 
-        label = "main_content"
-    ) { tab ->
+                                            pEQWorkstationDashboard(
+                                                viewModel
+                                            )
+                                        }
 
-        when (tab) {
+                                        Tab.Tuning -> {
 
-            Tab.Dashboard -> {
+                                            TuningScreen(viewModel)
+                                        }
 
-                pEQWorkstationDashboard(
-                    viewModel
-                )
-            }
+                                        Tab.Player -> {
 
-            Tab.Tuning -> {
+                                            val currentItem =
+                                                viewModel.currentMediaItem.value
 
-                TuningScreen(viewModel)
-            }
+                                            if (currentItem != null) {
 
-            Tab.Player -> {
+                                                key(currentItem.path) {
 
-                val currentItem =
-                    viewModel.currentMediaItem.value
+                                                    PlayerScreen(
+                                                        viewModel = viewModel,
+                                                        item = currentItem
+                                                    )
+                                                }
 
-                if (currentItem != null) {
+                                            } else {
 
-                    key(currentItem.path) {
+                                                EmptyPlayerState(
+                                                    onBack = {
+                                                        viewModel.currentTab.value =
+                                                            Tab.Dashboard
+                                                    }
+                                                )
+                                            }
+                                        }
 
-                        PlayerScreen(
-                            viewModel = viewModel,
-                            item = currentItem
-                        )
-                    }
+                                        Tab.Hardware -> {
 
-                } else {
-
-                    EmptyPlayerState(
-                        onBack = {
-                            viewModel.currentTab.value =
-                                Tab.Dashboard
-                        }
-                    )
-                }
-            }
-
-            Tab.Hardware -> {
-
-                HardwareScreen(viewModel)
-            }
-
-            Tab.Mixer -> {
-
-                pEQMixerScreen(viewModel)
-            }
-
-            Tab.Learn -> {
-
-                pEQLearnScreen(viewModel)
-            }
-        }
-    }
-}
+                                            HardwareScreen(viewModel)
+                                        }
+                                    }
+                                }
                             }
                         }
                     } else {

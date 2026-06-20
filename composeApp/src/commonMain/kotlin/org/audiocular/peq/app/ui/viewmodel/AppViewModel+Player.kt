@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 fun AppViewModel.stop() {
     audioEngine.stop()
     isPlaying.value = false
+    syncNowPlaying()
 }
 
 fun AppViewModel.togglePlayback() {
@@ -27,6 +28,7 @@ fun AppViewModel.togglePlayback() {
     // Safety check: If UI thinks we are playing but engine is not, try to resume engine
     if (isPlaying.value && !enginePlaying) {
         audioEngine.resume()
+        syncNowPlaying()
         return
     }
     
@@ -36,19 +38,24 @@ fun AppViewModel.togglePlayback() {
             audioEngine.loadTrack(item.path, item.title, item.artist, item.thumbnail)
             audioEngine.resume()
             isPlaying.value = true
+            syncNowPlaying()
             return
         }
     }
 
     if (isPlaying.value) audioEngine.pause() else audioEngine.resume()
     isPlaying.value = !isPlaying.value
+    syncNowPlaying()
 }
 
 fun AppViewModel.playExternalFile(
     path: String,
     displayName: String? = null,
     mimeType: String? = null,
-    sizeBytes: Long? = null
+    sizeBytes: Long? = null,
+    title: String? = null,
+    artist: String? = null,
+    durationMs: Long? = null
 ) {
     val decodedDisplayName = if (displayName != null) {
         displayName
@@ -72,13 +79,14 @@ fun AppViewModel.playExternalFile(
     
     val item = pEQMediaItem(
         id = "external_${path.hashCode()}",
-        title = decodedDisplayName.substringBeforeLast(".", decodedDisplayName),
-        subtitle = "External Source",
+        title = if (title != null && title.isNotBlank()) title else decodedDisplayName.substringBeforeLast(".", decodedDisplayName),
+        subtitle = if (artist != null && artist.isNotBlank()) artist else "External Source",
+        artist = if (artist != null && artist.isNotBlank()) artist else "External Source",
         path = path,
         type = if (isVideo) MediaType.VIDEO else MediaType.AUDIO,
         format = if (extension.isNotEmpty()) extension.uppercase() else (if (isVideo) "VIDEO" else "AUDIO"),
         sizeBytes = sizeBytes ?: 0L,
-        durationMs = 0L
+        durationMs = durationMs ?: 0L
     )
     
     playMediaItem(item, addToQueue = true)
@@ -113,8 +121,13 @@ fun AppViewModel.previousTrack() {
 }
 
 fun AppViewModel.seekTo(positionMs: Long) {
+    currentPosition.longValue = positionMs
+    isSeeking.value = true
     audioEngine.seekTo(positionMs)
-    currentPosition.value = positionMs
+    scope.launch {
+        delay(400)
+        isSeeking.value = false
+    }
 }
 
 fun AppViewModel.seekRelative(deltaMs: Long) {
@@ -122,7 +135,7 @@ fun AppViewModel.seekRelative(deltaMs: Long) {
     seekTo(newPos)
 }
 
-fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
+fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true, fromHomeScreen: Boolean = false) {
     showStemSplitter.value = false 
     currentMediaItem.value = item
     syncedLyrics.clear()
@@ -135,11 +148,23 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
         audioEngine.playTrack(playPath, item.title, item.artist, item.thumbnail)
         isPlaying.value = true
 
-        if (!item.lyrics.isNullOrBlank()) {
+        var finalLyrics = item.lyrics
+        if (finalLyrics.isNullOrBlank() && !item.path.startsWith("http")) {
+            val normalizedPath = normalizePath(item.path)
+            try {
+                val file = java.io.File(normalizedPath)
+                if (file.exists()) {
+                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                    finalLyrics = audioFile.tag?.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (!finalLyrics.isNullOrBlank()) {
             syncedLyrics.clear()
-            syncedLyrics.addAll(parseLrcInternal(item.lyrics))
+            syncedLyrics.addAll(parseLrcInternal(finalLyrics))
             if (syncedLyrics.isEmpty()) {
-                item.lyrics.lines().filter { it.isNotBlank() }.forEachIndexed { index, line ->
+                finalLyrics.lines().filter { it.isNotBlank() }.forEachIndexed { index, line ->
                     syncedLyrics.add(SyncedLine(timestampMs = index * 5000L, text = line))
                 }
             }
@@ -164,7 +189,9 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
     }
     
     updateMostPlayed(item)
-    currentTab.value = Tab.Player
+    if (item.type == MediaType.VIDEO) {
+        currentTab.value = Tab.Player
+    }
     
     // If video, enter immersive mode immediately
     if (item.type == MediaType.VIDEO) {
@@ -174,6 +201,7 @@ fun AppViewModel.playMediaItem(item: pEQMediaItem, addToQueue: Boolean = true) {
     }
     
     persistSession()
+    syncNowPlaying()
 }
 
 fun AppViewModel.playMediaItemFromQueue(index: Int) {
@@ -181,6 +209,7 @@ fun AppViewModel.playMediaItemFromQueue(index: Int) {
         val item = playbackQueue[index]
         setCurrentQueueIndex(index)
         playMediaItem(item, addToQueue = false)
+        syncNowPlaying()
     }
 }
 
@@ -210,7 +239,11 @@ fun AppViewModel.updateStemPan(stem: String, pan: Float) {
 fun AppViewModel.switchSubtitle(track: MediaTrack?) {
     selectedSubtitleTrack.value = track
     isSubtitlesEnabled.value = track != null && track.id != "none"
-    audioEngine.switchTrack(track)
+    if (track != null) {
+        audioEngine.switchTrack(track)
+    } else {
+        audioEngine.setSubtitlesEnabled(false)
+    }
 }
 
 fun AppViewModel.switchAudioTrack(track: MediaTrack?) {
@@ -230,15 +263,93 @@ fun AppViewModel.refreshAvailableTracks() {
 fun AppViewModel.onTrackLoaded() {
     scope.launch {
         val engineMetadata = audioEngine.getEmbeddedMetadata()
-        currentMediaItem.value = currentMediaItem.value?.copy(
+        fetchChapters()
+        
+        var embeddedLyricsText: String? = null
+        var trackTitle = currentMediaItem.value?.title ?: ""
+        var trackArtist = currentMediaItem.value?.artist ?: "External Source"
+        var sampleRateVal = audioEngine.getSampleRate()
+        var bitDepthVal = audioEngine.getBitDepth()
+        var codecVal = audioEngine.getCodec()
+        var sizeBytesVal = currentMediaItem.value?.sizeBytes ?: 0L
+        var durationMsVal = currentMediaItem.value?.durationMs ?: 0L
+
+        val currentPath = currentMediaItem.value?.path ?: ""
+        if (!currentPath.startsWith("http")) {
+            val normalizedPath = normalizePath(currentPath)
+            try {
+                val file = java.io.File(normalizedPath)
+                if (file.exists()) {
+                    if (sizeBytesVal == 0L) sizeBytesVal = file.length()
+                    
+                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                    val tag = audioFile.tag
+                    if (tag != null) {
+                        embeddedLyricsText = tag.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                        if (trackTitle.isBlank() || trackTitle == "temp_media") {
+                            trackTitle = tag.getFirst(org.jaudiotagger.tag.FieldKey.TITLE)
+                        }
+                        if (trackArtist.isBlank() || trackArtist == "External Source") {
+                            trackArtist = tag.getFirst(org.jaudiotagger.tag.FieldKey.ARTIST)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            if (embeddedLyricsText.isNullOrBlank() || trackTitle.isBlank() || trackArtist.isBlank() || durationMsVal == 0L) {
+                try {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    retriever.setDataSource(normalizedPath)
+                    if (embeddedLyricsText.isNullOrBlank()) {
+                        embeddedLyricsText = retriever.extractMetadata(31) // METADATA_KEY_LYRICS
+                            ?: retriever.extractMetadata(23)
+                            ?: retriever.extractMetadata(101)
+                    }
+                    if (trackTitle.isBlank() || trackTitle == "temp_media") {
+                        trackTitle = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE) ?: ""
+                    }
+                    if (trackArtist.isBlank() || trackArtist == "External Source") {
+                        trackArtist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
+                    }
+                    if (durationMsVal == 0L) {
+                        durationMsVal = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    }
+                    retriever.release()
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (trackTitle.isBlank()) {
+            trackTitle = currentPath.substringAfterLast("/").substringBeforeLast(".")
+        }
+        if (trackArtist.isBlank()) {
+            trackArtist = "External Source"
+        }
+
+        val updatedItem = currentMediaItem.value?.copy(
+            title = trackTitle,
+            subtitle = trackArtist,
+            artist = trackArtist,
             bitrate = engineMetadata.availableTracks.firstOrNull { it.type == TrackType.AUDIO }?.codec?.toIntOrNull() ?: 0,
-            codec = audioEngine.getCodec(),
-            sampleRate = audioEngine.getSampleRate(),
-            bitDepth = audioEngine.getBitDepth()
+            codec = codecVal,
+            sampleRate = sampleRateVal,
+            bitDepth = bitDepthVal,
+            sizeBytes = sizeBytesVal,
+            durationMs = if (durationMsVal > 0L) durationMsVal else (currentMediaItem.value?.durationMs ?: 0L),
+            lyrics = if (!embeddedLyricsText.isNullOrBlank()) embeddedLyricsText else currentMediaItem.value?.lyrics
         )
-        currentSampleRate.value = audioEngine.getSampleRate()
-        currentBitDepth.value = audioEngine.getBitDepth()
-        currentCodec.value = audioEngine.getCodec()
+
+        currentMediaItem.value = updatedItem
+        
+        // Update the queue item as well if present
+        val queueIndex = playbackQueue.indexOfFirst { it.path == currentPath }
+        if (queueIndex != -1 && updatedItem != null) {
+            playbackQueue[queueIndex] = updatedItem
+        }
+
+        currentSampleRate.value = sampleRateVal
+        currentBitDepth.value = bitDepthVal
+        currentCodec.value = codecVal
 
         delay(500)
         refreshAvailableTracks()
@@ -251,6 +362,7 @@ fun AppViewModel.onTrackLoaded() {
         refreshAvailableTracks()
         analyzeCurrentTrack() // 🧠 Auto-sync workstation telemetry
         persistSession()
+        syncNowPlaying()
     }
 }
 
@@ -502,4 +614,17 @@ fun AppViewModel.updateLoopPoints(a: Long?, b: Long?) {
     audioEngine.setLoopPoints(a, b)
 }
 
+fun AppViewModel.syncNowPlaying() {
+    persistenceManager.updateNowPlaying(currentMediaItem.value, isPlaying.value)
+}
+
 fun AppViewModel.syncNotificationState() {}
+
+fun AppViewModel.clearQueue() {
+    playbackQueue.clear()
+    _currentQueueIndex.value = -1
+    currentMediaItem.value = null
+    isPlaying.value = false
+    audioEngine.stop()
+    persistSession()
+}

@@ -544,27 +544,29 @@ private fun ModernLibraryChip(
     showDropdown: Boolean = false,
     onClick: () -> Unit
 ) {
-    FilterChip(
-        selected = selected,
+    Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        leadingIcon = { Icon(icon, null, modifier = Modifier.size(16.dp)) },
-        label = { 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                if (showDropdown) {
-                    Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(16.dp))
-                }
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+        contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Row(
+            modifier = Modifier
+                .height(34.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(text, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+            if (showDropdown) {
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(14.dp))
             }
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-            selectedLabelColor = MaterialTheme.colorScheme.primary,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
-        ),
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-    )
+        }
+    }
 }
 
 @Composable

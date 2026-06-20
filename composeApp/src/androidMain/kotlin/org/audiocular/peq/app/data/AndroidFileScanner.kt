@@ -57,13 +57,13 @@ class AndroidFileScanner(private val context: Context) : pEQFileScanner {
     override fun refresh() {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             _scanProgress.value = 0.1f
-            _scanStatus.value = "Auditing Video Archives..."
+            _scanStatus.value = "Loading Audio Files..."
             refreshVideos()
             _scanProgress.value = 0.5f
-            _scanStatus.value = "Auditing Audio Stems..."
+            _scanStatus.value = "Loading Video Files..."
             refreshAudio()
             _scanProgress.value = 1.0f
-            _scanStatus.value = "Library Audit Complete"
+            _scanStatus.value = "Library Loading Complete"
         }
     }
 
@@ -200,38 +200,30 @@ class AndroidFileScanner(private val context: Context) : pEQFileScanner {
                 val artUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId).toString()
 
                 // 📝 EMBEDDED LYRICS EXTRACTOR (P-12)
-              // 📝 EMBEDDED LYRICS EXTRACTOR (P-12)
+                var embeddedLyrics: String? = null
+                try {
+                    val file = java.io.File(path)
+                    if (file.exists()) {
+                        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                        val tag = audioFile.tag
+                        if (tag != null) {
+                            embeddedLyrics = tag.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                        }
+                    }
+                } catch (_: Exception) {
+                }
 
-var embeddedLyrics: String? = null
-
-try {
-
-    val retriever =
-        android.media.MediaMetadataRetriever()
-
-    retriever.setDataSource(path)
-
-    /*
-     * Android does not reliably expose
-     * METADATA_KEY_LYRICS publicly.
-     *
-     * 31 = embedded lyrics metadata key
-     */
-
-    embeddedLyrics =
-        retriever.extractMetadata(31)
-
-    retriever.release()
-
-} catch (_: Exception) {
-
-    /*
-     * corrupted metadata
-     * unsupported container
-     * invalid headers
-     */
-
-}
+                if (embeddedLyrics.isNullOrBlank()) {
+                    try {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        retriever.setDataSource(path)
+                        embeddedLyrics = retriever.extractMetadata(31) // METADATA_KEY_LYRICS
+                            ?: retriever.extractMetadata(23)
+                            ?: retriever.extractMetadata(101)
+                        retriever.release()
+                    } catch (_: Exception) {
+                    }
+                }
 
                 val trackVal = it.getInt(trackCol)
                 val disc = if (trackVal >= 1000) trackVal / 1000 else 1
@@ -279,16 +271,45 @@ try {
         }
     }
 
-    override fun deleteFile(file: VideoFile) {
-        if (java.io.File(file.path).delete()) {
-            refresh()
+    private fun requestDelete(uri: android.net.Uri, filePath: String) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            try {
+                val pendingIntent = android.provider.MediaStore.createDeleteRequest(context.contentResolver, listOf(uri))
+                if (context is android.app.Activity) {
+                    context.startIntentSenderForResult(pendingIntent.intentSender, 1005, null, 0, 0, 0)
+                }
+            } catch (e: Exception) {
+                java.io.File(filePath).delete()
+                refresh()
+            }
+        } else {
+            try {
+                context.contentResolver.delete(uri, null, null)
+                refresh()
+            } catch (securityException: SecurityException) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && securityException is android.app.RecoverableSecurityException) {
+                    if (context is android.app.Activity) {
+                        context.startIntentSenderForResult(securityException.userAction.actionIntent.intentSender, 1005, null, 0, 0, 0)
+                    }
+                } else {
+                    java.io.File(filePath).delete()
+                    refresh()
+                }
+            } catch (e: Exception) {
+                java.io.File(filePath).delete()
+                refresh()
+            }
         }
     }
 
+    override fun deleteFile(file: VideoFile) {
+        val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, file.id.toLong())
+        requestDelete(uri, file.path)
+    }
+
     override fun deleteAudioFile(file: AudioFile) {
-        if (java.io.File(file.path).delete()) {
-            refresh()
-        }
+        val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, file.id.toLong())
+        requestDelete(uri, file.path)
     }
 
     override fun shareFile(file: VideoFile) {
@@ -344,6 +365,50 @@ try {
             java.io.File(path).listFiles()?.map { it.absolutePath } ?: emptyList()
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    override fun updateAudioMetadata(
+        path: String,
+        title: String,
+        artist: String,
+        album: String,
+        albumArtist: String,
+        genre: String,
+        composer: String,
+        trackNumber: Int,
+        discNumber: Int,
+        year: Int
+    ) {
+        try {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+                val tag = audioFile.tag ?: org.jaudiotagger.tag.id3.ID3v24Tag()
+                audioFile.tag = tag
+                
+                tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist)
+                tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, genre)
+                tag.setField(org.jaudiotagger.tag.FieldKey.COMPOSER, composer)
+                if (trackNumber > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.TRACK, trackNumber.toString())
+                }
+                if (discNumber > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.DISC_NO, discNumber.toString())
+                }
+                if (year > 0) {
+                    tag.setField(org.jaudiotagger.tag.FieldKey.YEAR, year.toString())
+                }
+                
+                audioFile.commit()
+                println("pEQControl: [METADATA] Successfully committed ID3 tags for $path")
+                refresh()
+            }
+        } catch (e: Exception) {
+            println("pEQControl: [METADATA] Failed to write ID3 tags physically: ${e.message}")
         }
     }
 }

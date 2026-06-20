@@ -54,7 +54,10 @@ actual fun pEQImage(
                 // Helper to try reading a path as direct image
                 fun tryLoadDirect(path: String?): ImageBitmap? {
                     if (path.isNullOrBlank()) return null
-                    val cleaned = path.replace("file://", "")
+                    var cleaned = path.replace("file://", "").replace("file:/", "/")
+                    if (cleaned.startsWith("//")) {
+                        cleaned = cleaned.substring(1)
+                    }
                     if (path.startsWith("http")) {
                         return try {
                             ImageIO.read(URL(path))?.toComposeImageBitmap()
@@ -91,7 +94,7 @@ actual fun pEQImage(
                     val file = File(cleaned)
                     if (file.exists() && file.isFile) {
                         val extension = file.extension.lowercase()
-                        if (extension in setOf("mp3", "flac", "wav", "m4a", "ogg", "wma", "aac")) {
+                        if (extension in setOf("mp3", "flac", "wav", "m4a", "ogg", "wma", "aac", "mp4", "mkv")) {
                             return extractEmbeddedArt(file)
                         }
                     }
@@ -159,15 +162,26 @@ actual fun pEQImage(
 private fun extractEmbeddedArt(file: File): ImageBitmap? {
     try {
         if (!file.exists()) return null
-        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
-        val tag = audioFile.tag ?: return null
-        val artwork = tag.firstArtwork ?: return null
-        val binaryData = artwork.binaryData ?: return null
-        val bis = java.io.ByteArrayInputStream(binaryData)
-        val img = ImageIO.read(bis) ?: return null
-        return img.toComposeImageBitmap()
+        val extension = file.extension.lowercase()
+        var binaryData: ByteArray? = null
+        if (extension == "mp4" || extension == "m4v") {
+            binaryData = org.audiocular.peq.app.Mp4CoverExtractor.extract(file)
+        }
+        if (binaryData == null) {
+            val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
+            val tag = audioFile.tag
+            val artwork = tag?.firstArtwork
+            binaryData = artwork?.binaryData
+        }
+        if (binaryData != null) {
+            val bis = java.io.ByteArrayInputStream(binaryData)
+            val img = javax.imageio.ImageIO.read(bis)
+            if (img != null) {
+                return img.toComposeImageBitmap()
+            }
+        }
     } catch (e: Exception) {
-        println("pEQControl: Failed to extract embedded art via jaudiotagger: ${e.message}")
+        println("pEQControl: Failed to extract embedded art via extractor/jaudiotagger: ${e.message}")
     }
     return null
 }

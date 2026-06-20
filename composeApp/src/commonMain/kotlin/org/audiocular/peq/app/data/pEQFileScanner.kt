@@ -27,4 +27,5 @@ interface pEQFileScanner {
     fun readFileContent(path: String): String?
     fun readResourceContent(name: String): String?
     fun listFiles(path: String): List<String>
+    fun updateAudioMetadata(path: String, title: String, artist: String, album: String, albumArtist: String, genre: String, composer: String, trackNumber: Int, discNumber: Int, year: Int)
 }

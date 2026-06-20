@@ -51,7 +51,7 @@ fun ChordVisualizer(
                 
                 // Piano Keyboard
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("PIANO (88-KEY)", fontSize = 8.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Text("PIANO (CDEFGAB)", fontSize = 8.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
                     PianoChordWidget(chord, pianoShapes)
                 }

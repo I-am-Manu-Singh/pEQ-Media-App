@@ -6,5 +6,7 @@
     android:initialLayout="@layout/glance_default_layout"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview">
+    android:previewLayout="@layout/glance_default_layout"
+    android:configure="org.audiocular.peq.app.activities.pEQWidgetConfigActivity"
+    android:widgetFeatures="reconfigurable">
 </appwidget-provider>

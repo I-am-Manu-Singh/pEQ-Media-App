@@ -98,7 +98,8 @@ fun InfoChip(
 
 @Composable
 fun SectionHeader(
-    title: String
+    title: String,
+    modifier: Modifier = Modifier
 ) {
     Text(
         text = title.uppercase(),
@@ -106,7 +107,7 @@ fun SectionHeader(
         fontWeight = FontWeight.Black,
         color = MaterialTheme.colorScheme.primary,
         letterSpacing = 1.2.sp,
-        modifier = Modifier.padding(vertical = 4.dp)
+        modifier = modifier.padding(vertical = 4.dp)
     )
 }
 
