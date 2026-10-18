@@ -1,5 +1,10 @@
 # pEQ Neural Workstation 🧠🎶
 
+<p align="center">
+  <img src="playstore/icon_512.png" alt="pEQ Neural Workstation Logo" width="128" height="128" style="border-radius: 20%;" />
+</p>
+
+
 **pEQ** is a cross-platform neural media workstation built for high-fidelity playback, cinematic visualization, DSP experimentation, and intelligent media control across **Android and Desktop** environments.
 
 Unlike traditional media players focused purely on consumption, pEQ blends studio-inspired tooling, immersive playback systems, AI-assisted processing, synchronized metadata, and advanced visualization into a unified workstation architecture. Because apparently humanity looked at ordinary music players and decided they needed neural telemetry overlays, VLC callback rendering pipelines, and FFT analyzers running at 2AM.
@@ -14,6 +19,51 @@ Unlike traditional media players focused purely on consumption, pEQ blends studi
 - 🌐 Intelligent Stream Resolution
 - 🎨 Adaptive Neural UI System
 - 🖥 Cross-Platform Android + Desktop Architecture
+
+---
+
+## 📱 App Screenshots
+
+<p align="center">
+  <table>
+    <tr>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_1.png" alt="Screenshot 1" width="100%" /><br />
+        <b>1. Main Screen</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_2.png" alt="Screenshot 2" width="100%" /><br />
+        <b>2. Core Experience</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_3.png" alt="Screenshot 3" width="100%" /><br />
+        <b>3. Interactive Mode</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_4.png" alt="Screenshot 4" width="100%" /><br />
+        <b>4. Advanced Features</b>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_5.png" alt="Screenshot 5" width="100%" /><br />
+        <b>5. Workflow / Details</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_6.png" alt="Screenshot 6" width="100%" /><br />
+        <b>6. Studio Console</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_7.png" alt="Screenshot 7" width="100%" /><br />
+        <b>7. Settings & Config</b>
+      </td>
+      <td align="center" width="25%">
+        <img src="screenshots/screenshot_8.png" alt="Screenshot 8" width="100%" /><br />
+        <b>8. Dark & Light Theme</b>
+      </td>
+    </tr>
+  </table>
+</p>
 
 ---
 
